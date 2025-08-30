@@ -160,6 +160,15 @@ private:
     void load_ui_font();
     void draw_help_overlay_sfml();
     std::vector<UISlider> ui_sliders;
+    void layout_ui_sliders();
+    float slider_panel_x = 50.0f;
+    float slider_panel_y = 80.0f;
+    float slider_panel_padding = 12.0f;
+    float slider_track_width = 260.0f;
+    float slider_track_height = 12.0f;
+    float slider_vertical_spacing = 38.0f;
+    bool ui_mouse_captured = false;
+    bool is_mouse_over_ui(const sf::Vector2f& mps) const;
 };
 
 sf::Texture pixels_to_sfml_texture(const Pixels& pixels);

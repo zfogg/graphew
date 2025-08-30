@@ -47,22 +47,44 @@ void GraphRenderer::add_slider(const std::string& label, float* target, float mi
     s.min_value = min_value;
     s.max_value = max_value;
     s.last_value = target ? *target : 0.0f;
-    s.rect_px = {20.f, 100.f + static_cast<float>(ui_sliders.size()) * 40.f, 220.f, 20.f};
+    s.rect_px = {0.f, 0.f, 0.f, 0.f};
     s.dragging = false;
     ui_sliders.push_back(s);
+}
+
+void GraphRenderer::layout_ui_sliders() {
+    float x = slider_panel_x + slider_panel_padding;
+    float y = slider_panel_y + slider_panel_padding + 22.0f;
+    for (size_t i = 0; i < ui_sliders.size(); ++i) {
+        ui_sliders[i].rect_px = {x, y + static_cast<float>(i) * slider_vertical_spacing, slider_track_width, slider_track_height};
+    }
+}
+
+bool GraphRenderer::is_mouse_over_ui(const sf::Vector2f& mps) const {
+    float panel_w = slider_track_width + slider_panel_padding * 2.0f;
+    float panel_h = slider_panel_padding * 2.0f + 22.0f + static_cast<float>(ui_sliders.size()) * slider_vertical_spacing;
+    return mps.x >= slider_panel_x && mps.x <= slider_panel_x + panel_w &&
+           mps.y >= slider_panel_y && mps.y <= slider_panel_y + panel_h;
 }
 
 void GraphRenderer::handle_ui_event(const sf::Event& ev) {
     if (ui_sliders.empty()) return;
     if (!window.hasFocus()) return;
+    layout_ui_sliders();
     
     if (auto* pressed = ev.getIf<sf::Event::MouseButtonPressed>()) {
         sf::Vector2i mp = sf::Mouse::getPosition(window);
         sf::Vector2f mps(static_cast<float>(mp.x), static_cast<float>(mp.y));
+        ui_mouse_captured = is_mouse_over_ui(mps);
         for (auto& s : ui_sliders) {
             if (mps.x >= s.rect_px.left && mps.x <= s.rect_px.left + s.rect_px.width &&
                 mps.y >= s.rect_px.top && mps.y <= s.rect_px.top + s.rect_px.height) {
                 s.dragging = true;
+                if (s.target) {
+                    float t = (mps.x - s.rect_px.left) / s.rect_px.width;
+                    t = std::max(0.0f, std::min(1.0f, t));
+                    *s.target = s.min_value + t * (s.max_value - s.min_value);
+                }
             }
         }
     } else if (auto* moved = ev.getIf<sf::Event::MouseMoved>()) {
@@ -77,6 +99,7 @@ void GraphRenderer::handle_ui_event(const sf::Event& ev) {
         }
     } else if (auto* released = ev.getIf<sf::Event::MouseButtonReleased>()) {
         for (auto& s : ui_sliders) s.dragging = false;
+        ui_mouse_captured = false;
     }
 }
 
@@ -85,19 +108,22 @@ void GraphRenderer::draw_ui_sliders() {
     sf::View original_view = window.getView();
     window.setView(window.getDefaultView());
     
+    layout_ui_sliders();
     // Background panel
-    sf::RectangleShape panel(sf::Vector2f(260.f, 40.f + static_cast<float>(ui_sliders.size()) * 40.f));
-    panel.setPosition(sf::Vector2f(10.f, 100.f));
+    float panel_w = slider_track_width + slider_panel_padding * 2.0f;
+    float panel_h = slider_panel_padding * 2.0f + 22.0f + static_cast<float>(ui_sliders.size()) * slider_vertical_spacing;
+    sf::RectangleShape panel(sf::Vector2f(panel_w, panel_h));
+    panel.setPosition(sf::Vector2f(slider_panel_x, slider_panel_y));
     panel.setFillColor(sf::Color(20, 20, 26, 180));
     panel.setOutlineThickness(1.0f);
     panel.setOutlineColor(sf::Color(90, 90, 120, 200));
     window.draw(panel);
     
     for (const auto& s : ui_sliders) {
-        // Track
+        // Track (thicker)
         sf::RectangleShape track(sf::Vector2f(s.rect_px.width, s.rect_px.height));
         track.setPosition(sf::Vector2f(s.rect_px.left, s.rect_px.top));
-        track.setFillColor(sf::Color(70, 80, 120, 180));
+        track.setFillColor(sf::Color(82, 90, 130, 220));
         window.draw(track);
         
         // Thumb based on value
@@ -105,10 +131,10 @@ void GraphRenderer::draw_ui_sliders() {
             float t = (*s.target - s.min_value) / (s.max_value - s.min_value);
             t = std::max(0.0f, std::min(1.0f, t));
             float x = s.rect_px.left + t * s.rect_px.width;
-            sf::RectangleShape thumb(sf::Vector2f(6.f, s.rect_px.height + 6.f));
-            thumb.setOrigin(sf::Vector2f(3.f, 3.f));
+            sf::RectangleShape thumb(sf::Vector2f(10.f, s.rect_px.height + 10.f));
+            thumb.setOrigin(sf::Vector2f(5.f, 5.f));
             thumb.setPosition(sf::Vector2f(x, s.rect_px.top + s.rect_px.height * 0.5f));
-            thumb.setFillColor(sf::Color(230, 230, 255, 220));
+            thumb.setFillColor(sf::Color(240, 240, 255, 245));
             window.draw(thumb);
         }
         
@@ -118,9 +144,9 @@ void GraphRenderer::draw_ui_sliders() {
             char buf[128];
             std::snprintf(buf, sizeof(buf), "%s: %.2f", s.label.c_str(), *s.target);
             txt.setString(buf);
-            txt.setCharacterSize(14);
-            txt.setFillColor(sf::Color(220, 220, 235, 220));
-            txt.setPosition(sf::Vector2f(s.rect_px.left, s.rect_px.top - 18.f));
+            txt.setCharacterSize(16);
+            txt.setFillColor(sf::Color(220, 220, 235, 240));
+            txt.setPosition(sf::Vector2f(s.rect_px.left, s.rect_px.top - 22.f));
             window.draw(txt);
         }
     }
@@ -1015,6 +1041,9 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         
         window.setView(original_view);
     }
+    
+    // Draw interactive UI (sliders) on top of everything
+    draw_ui_sliders();
     
     window.display();
 }

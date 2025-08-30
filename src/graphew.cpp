@@ -269,9 +269,6 @@ int main(int argc, char* argv[]) {
             Pixels empty;
             renderer->render_frame(*graph3d, empty);
         }
-        
-        // Draw interactive UI (sliders)
-        renderer->draw_ui_sliders();
     }
     
     cleanup_args(&args);
