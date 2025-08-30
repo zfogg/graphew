@@ -13,8 +13,13 @@ public:
         float dimension;
         int iterations;
         
+        // Force ramp-up parameters
+        float ramp_duration_seconds;
+        float force_multiplier; // 0.0 to 1.0 - gradually increases from 0 to full strength
+        
         PhysicsParams() : repel(0.5f), attract(0.1f), decay(0.8f), 
-                         centering_strength(0.1f), dimension(3.0f), iterations(50) {}
+                         centering_strength(0.1f), dimension(3.0f), iterations(50),
+                         ramp_duration_seconds(3.0f), force_multiplier(0.0f) {}
     };
     
     static void apply_force_layout(Graph3D& graph, const PhysicsParams& params = PhysicsParams());

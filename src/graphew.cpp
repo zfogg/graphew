@@ -215,7 +215,7 @@ int main(int argc, char* argv[]) {
     sf::Clock clock;
     bool physics_enabled = true;
     bool show_overlay = true;
-    bool force_layout_running = true; // continuous by default
+    bool force_layout_running = false; // Start disabled - will enable after 3-second delay
 
     // Setup force layout parameters for real-time simulation
     ForceLayoutEngine::PhysicsParams layout_params;
@@ -224,6 +224,7 @@ int main(int argc, char* argv[]) {
     layout_params.decay = 0.6f;
     layout_params.iterations = 1000000000; // effectively infinite when used for step batches
     layout_params.dimension = 3.0f;
+    layout_params.ramp_duration_seconds = 3.0f;
 
     // Expose sliders in the UI for interactive tuning
     renderer->clear_sliders();
@@ -239,6 +240,10 @@ int main(int argc, char* argv[]) {
     int reset_pause_frames = 0;
     bool r_key_was_pressed = false;
 
+    // Force ramp-up system - gradually increase force strength
+    sf::Clock force_ramp_timer;
+    bool force_ramp_active = true;
+
     while (!renderer->should_close()) {
         float delta_time = clock.restart().asSeconds();
 
@@ -246,7 +251,34 @@ int main(int argc, char* argv[]) {
         // Sync render dimension from slider
         renderer->set_render_dimension(render_dim);
 
-        // Handle reset pause countdown first
+        // Handle force ramp-up with custom ease-in curve
+        if (force_ramp_active) {
+            float elapsed = force_ramp_timer.getElapsedTime().asSeconds();
+            if (elapsed < layout_params.ramp_duration_seconds) {
+                // Normalize time to 0-1
+                float t = elapsed / layout_params.ramp_duration_seconds;
+
+                // Custom piecewise ease-in curve: gentle until 70%, steep in last 30%
+                if (t < 0.7f) {
+                    // First 70%: gentle cubic curve to reach 0.3
+                    float t_scaled = t / 0.7f; // 0 to 1 over first 70%
+                    layout_params.force_multiplier = 0.3f * (t_scaled * t_scaled * t_scaled); // Cubic ease-in to 0.3
+                } else {
+                    // Last 30%: steep rise from 0.3 to 1.0
+                    float t_scaled = (t - 0.7f) / 0.3f; // 0 to 1 over last 30%
+                    layout_params.force_multiplier = 0.3f + 0.7f * (t_scaled * t_scaled); // Quadratic acceleration
+                }
+
+                force_layout_running = true; // Enable force layout during ramp
+            } else {
+                // Ramp complete - full strength
+                layout_params.force_multiplier = 1.0f;
+                force_ramp_active = false;
+                std::cout << "Force ramp-up complete - full strength" << std::endl;
+            }
+        }
+
+        // Handle reset pause countdown
         if (reset_pause_frames > 0) {
             reset_pause_frames--;
             if (reset_pause_frames == 0 && physics_enabled) {
@@ -285,7 +317,6 @@ int main(int argc, char* argv[]) {
         }
 
         // R key resets graph to initial layout (no timer - works immediately)
-        static bool r_key_was_pressed = false;
         bool r_key_is_pressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R);
         // Only trigger on key press (not while held down)
         if (r_key_is_pressed && !r_key_was_pressed) {
@@ -309,10 +340,13 @@ int main(int argc, char* argv[]) {
             force_layout_running = false;
             physics_enabled = true; // Ensure physics is enabled for later restart
 
-            // Set the loop variable to pause force layout
-            reset_pause_frames = 5; // Pause for 60 frames (~1 second at 60fps)
+            // Restart force ramp-up from beginning
+            force_ramp_timer.restart();
+            force_ramp_active = true;
+            layout_params.force_multiplier = 0.0f; // Start from zero force
+            force_layout_running = true; // Enable force layout with zero force initially
 
-            std::cout << "Force layout paused - will restart in 1 second" << std::endl;
+            std::cout << "Force layout ramping up slowly from initial state" << std::endl;
 
         }
 

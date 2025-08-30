@@ -46,10 +46,10 @@ void ForceLayoutEngine::apply_force_layout(Graph3D& graph, const PhysicsParams& 
             node.force = Vector3(0, 0, 0);
         }
         
-        // Compute all forces with fractional dimensionality
-        compute_repulsion_forces(physics_nodes, params.repel, params.dimension);
-        compute_attraction_forces(physics_nodes, graph, params.attract, params.dimension);
-        apply_centering_force(physics_nodes, params.centering_strength, params.dimension);
+        // Compute all forces with fractional dimensionality and ramp multiplier
+        compute_repulsion_forces(physics_nodes, params.repel * params.force_multiplier, params.dimension);
+        compute_attraction_forces(physics_nodes, graph, params.attract * params.force_multiplier, params.dimension);
+        apply_centering_force(physics_nodes, params.centering_strength * params.force_multiplier, params.dimension);
         
         // Integrate physics
         integrate_physics(physics_nodes, params.decay, params.dimension);
@@ -110,10 +110,10 @@ bool ForceLayoutEngine::apply_force_layout_step(Graph3D& graph, const PhysicsPar
             node.force = Vector3(0, 0, 0);
         }
         
-        // Compute all forces with fractional dimensionality
-        compute_repulsion_forces(physics_nodes, params.repel, params.dimension);
-        compute_attraction_forces(physics_nodes, graph, params.attract, params.dimension);
-        apply_centering_force(physics_nodes, params.centering_strength, params.dimension);
+        // Compute all forces with fractional dimensionality and ramp multiplier
+        compute_repulsion_forces(physics_nodes, params.repel * params.force_multiplier, params.dimension);
+        compute_attraction_forces(physics_nodes, graph, params.attract * params.force_multiplier, params.dimension);
+        apply_centering_force(physics_nodes, params.centering_strength * params.force_multiplier, params.dimension);
         
         // Integrate physics
         integrate_physics(physics_nodes, params.decay, params.dimension);
