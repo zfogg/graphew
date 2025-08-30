@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <map>
 
 #define MAX_NODES 1000
 #define MAX_EDGES 2000
@@ -47,9 +48,20 @@ struct GraphNode {
     Vector3 velocity;
     Vector3 force;
     Color color;
+    Color original_color;  // Store original color for filtering
     float radius;
+    float original_radius; // Store original radius for filtering
     char label[MAX_LABEL_LENGTH];
     bool visible;
+    
+    // Metadata for filtering
+    std::string type;        // e.g., "agent", "item", "location", "state"
+    std::string subtype;     // e.g., "red_ore", "blue_ore", "inventory"
+    std::map<std::string, std::string> properties; // Generic key-value pairs
+    std::vector<std::string> tags;  // e.g., ["has_red_ore", "solution", "visited"]
+    int agent_id;            // For agent-specific nodes
+    int timestep;            // For time-based filtering
+    float value;             // Generic numeric value (reward, quantity, etc.)
 };
 
 struct GraphEdge {

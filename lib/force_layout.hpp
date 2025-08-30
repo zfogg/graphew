@@ -28,10 +28,10 @@ private:
         uint32_t node_id;
     };
     
-    static void compute_repulsion_forces(std::vector<NodePhysics>& physics_nodes, float repel_strength);
+    static void compute_repulsion_forces(std::vector<NodePhysics>& physics_nodes, float repel_strength, float dimension);
     static void compute_attraction_forces(std::vector<NodePhysics>& physics_nodes, 
-                                         const Graph3D& graph, float attract_strength);
-    static void apply_centering_force(std::vector<NodePhysics>& physics_nodes, float centering_strength);
+                                         const Graph3D& graph, float attract_strength, float dimension);
+    static void apply_centering_force(std::vector<NodePhysics>& physics_nodes, float centering_strength, float dimension);
     static void integrate_physics(std::vector<NodePhysics>& physics_nodes, float decay, float dimension);
     static Vector3 calculate_center_of_mass(const std::vector<NodePhysics>& physics_nodes);
 };

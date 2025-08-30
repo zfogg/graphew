@@ -168,6 +168,13 @@ void GraphRenderer::handle_events() {
         else if (auto* ev = event->getIf<sf::Event::MouseMoved>()) {
             handle_ui_event(*event);
         }
+        else if (auto* resized = event->getIf<sf::Event::Resized>()) {
+            // Keep world view and default view consistent with new window size
+            sf::Vector2u sz = window.getSize();
+            view.setSize(sf::Vector2f(static_cast<float>(sz.x) / zoom_level,
+                                       static_cast<float>(sz.y) / zoom_level));
+            window.setView(view);
+        }
         else if (auto* mouseWheel = event->getIf<sf::Event::MouseWheelScrolled>()) {
             // Ignore when over UI
             sf::Vector2i mp = sf::Mouse::getPosition(window);
@@ -339,6 +346,10 @@ void GraphRenderer::update_camera() {
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::J)) {
         adjust_lighting(0, -0.01f);
     }
+
+    // Keep render-dimension in sync with layout dimension if a slider is present
+    // (Dimension slider is the last one we add, so read from layout_params via main loop plumbing
+    // but since we don't have it here, softly ease render_dimension toward 2 or 3 using keyboard for demo)
     
     // Light rotation with numpad
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Numpad4)) {
@@ -540,10 +551,12 @@ void GraphRenderer::update_camera_position() {
 
 sf::Vector2f GraphRenderer::world_to_screen_3d(const Vector3& world_pos) {
     // Transform world position relative to camera
-    Vector3 relative_pos = world_pos - camera_position;
+    Vector3 wp = scale_for_render(world_pos);
+    Vector3 cp = scale_for_render(camera_position);
+    Vector3 relative_pos = wp - cp;
     
     // Create view matrix (simplified)
-    Vector3 forward = (camera_target - camera_position).normalize();
+    Vector3 forward = (scale_for_render(camera_target) - cp).normalize();
     Vector3 right = Vector3(forward.z, 0, -forward.x).normalize(); // Cross with up(0,1,0)
     Vector3 up = Vector3(-forward.x * forward.y, forward.x * forward.x + forward.z * forward.z, -forward.z * forward.y).normalize();
     
@@ -914,7 +927,7 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
     draw_axes();
 
     // Precompute camera forward direction for depth calculations
-    Vector3 forward_dir = (camera_target - camera_position).normalize();
+    Vector3 forward_dir = (scale_for_render(camera_target) - scale_for_render(camera_position)).normalize();
     
     // Draw edges with 3D perspective and lighting
     std::vector<sf::Vertex> edge_vertices;
@@ -931,7 +944,7 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         
         // Calculate depth for fog
         Vector3 edge_center = (from_node.position + to_node.position) * 0.5f;
-        Vector3 relative_pos = edge_center - camera_position;
+        Vector3 relative_pos = scale_for_render(edge_center) - scale_for_render(camera_position);
         float depth = relative_pos.x * forward_dir.x + relative_pos.y * forward_dir.y + relative_pos.z * forward_dir.z;
         
         // Base edge color with transparency based on depth
@@ -988,7 +1001,7 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         sf::Vector2f screen_pos = world_to_screen_3d(node.position);
         
         // Calculate depth for perspective scaling
-        Vector3 relative_pos = node.position - camera_position;
+        Vector3 relative_pos = scale_for_render(node.position) - scale_for_render(camera_position);
         float depth = relative_pos.x * forward_dir.x + relative_pos.y * forward_dir.y + relative_pos.z * forward_dir.z;
         
         float perspective_scale = apply_perspective(depth);
@@ -1026,16 +1039,8 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         window.draw(circle);
     }
     
-    // Draw help overlay if enabled
-    if (show_help) {
-        sf::View original_view = window.getView();
-        window.setView(window.getDefaultView());
-        draw_help_overlay_sfml();
-        window.setView(original_view);
-    }
-    
-    // Draw custom overlay if provided
-    else if (!overlay.is_empty()) {
+    // Draw custom overlay if provided (and help is not shown)
+    if (!show_help && !overlay.is_empty()) {
         sf::Texture overlay_texture = pixels_to_sfml_texture(overlay);
         sf::Sprite overlay_sprite(overlay_texture);
         
@@ -1051,8 +1056,16 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         window.setView(original_view);
     }
     
-    // Draw interactive UI (sliders) on top of everything
+    // Draw interactive UI (sliders)
     draw_ui_sliders();
+
+    // Draw help overlay last so it sits above sliders
+    if (show_help) {
+        sf::View original_view2 = window.getView();
+        window.setView(window.getDefaultView());
+        draw_help_overlay_sfml();
+        window.setView(original_view2);
+    }
     
     window.display();
 }

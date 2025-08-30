@@ -3,6 +3,9 @@
 #include <iostream>
 #include <random>
 
+// Smooth fractional axis weight: 0 -> near-locked (epsilon), 1 -> fully enabled
+static inline float axis_weight(float dimension, float axisIndex) { return 0.001f + 0.999f * std::min(1.0f, std::max(0.0f, dimension - axisIndex)); }
+
 void ForceLayoutEngine::apply_force_layout(Graph3D& graph, const PhysicsParams& params) {
     if (graph.node_count == 0) return;
     
@@ -43,10 +46,10 @@ void ForceLayoutEngine::apply_force_layout(Graph3D& graph, const PhysicsParams& 
             node.force = Vector3(0, 0, 0);
         }
         
-        // Compute all forces
-        compute_repulsion_forces(physics_nodes, params.repel);
-        compute_attraction_forces(physics_nodes, graph, params.attract);
-        apply_centering_force(physics_nodes, params.centering_strength);
+        // Compute all forces with fractional dimensionality
+        compute_repulsion_forces(physics_nodes, params.repel, params.dimension);
+        compute_attraction_forces(physics_nodes, graph, params.attract, params.dimension);
+        apply_centering_force(physics_nodes, params.centering_strength, params.dimension);
         
         // Integrate physics
         integrate_physics(physics_nodes, params.decay, params.dimension);
@@ -92,10 +95,10 @@ bool ForceLayoutEngine::apply_force_layout_step(Graph3D& graph, const PhysicsPar
             node.force = Vector3(0, 0, 0);
         }
         
-        // Compute all forces
-        compute_repulsion_forces(physics_nodes, params.repel);
-        compute_attraction_forces(physics_nodes, graph, params.attract);
-        apply_centering_force(physics_nodes, params.centering_strength);
+        // Compute all forces with fractional dimensionality
+        compute_repulsion_forces(physics_nodes, params.repel, params.dimension);
+        compute_attraction_forces(physics_nodes, graph, params.attract, params.dimension);
+        apply_centering_force(physics_nodes, params.centering_strength, params.dimension);
         
         // Integrate physics
         integrate_physics(physics_nodes, params.decay, params.dimension);
@@ -112,12 +115,14 @@ bool ForceLayoutEngine::apply_force_layout_step(Graph3D& graph, const PhysicsPar
     return remaining_iterations > 0;
 }
 
-void ForceLayoutEngine::compute_repulsion_forces(std::vector<NodePhysics>& physics_nodes, float repel_strength) {
+void ForceLayoutEngine::compute_repulsion_forces(std::vector<NodePhysics>& physics_nodes, float repel_strength, float dimension) {
     const float min_distance = 0.1f;
     
     for (size_t i = 0; i < physics_nodes.size(); i++) {
         for (size_t j = i + 1; j < physics_nodes.size(); j++) {
             Vector3 diff = physics_nodes[i].position - physics_nodes[j].position;
+            diff.y *= axis_weight(dimension, 1.0f);
+            diff.z *= axis_weight(dimension, 2.0f);
             float distance = diff.length();
             
             if (distance < min_distance) distance = min_distance;
@@ -133,7 +138,7 @@ void ForceLayoutEngine::compute_repulsion_forces(std::vector<NodePhysics>& physi
 }
 
 void ForceLayoutEngine::compute_attraction_forces(std::vector<NodePhysics>& physics_nodes, 
-                                                  const Graph3D& graph, float attract_strength) {
+                                                  const Graph3D& graph, float attract_strength, float dimension) {
     const float max_distance = 50.0f;
     
     for (uint32_t e = 0; e < graph.edge_count; e++) {
@@ -146,6 +151,8 @@ void ForceLayoutEngine::compute_attraction_forces(std::vector<NodePhysics>& phys
         if (from_id >= physics_nodes.size() || to_id >= physics_nodes.size()) continue;
         
         Vector3 diff = physics_nodes[to_id].position - physics_nodes[from_id].position;
+        diff.y *= axis_weight(dimension, 1.0f);
+        diff.z *= axis_weight(dimension, 2.0f);
         float distance = diff.length();
         
         if (distance > max_distance) distance = max_distance;
@@ -160,11 +167,13 @@ void ForceLayoutEngine::compute_attraction_forces(std::vector<NodePhysics>& phys
     }
 }
 
-void ForceLayoutEngine::apply_centering_force(std::vector<NodePhysics>& physics_nodes, float centering_strength) {
+void ForceLayoutEngine::apply_centering_force(std::vector<NodePhysics>& physics_nodes, float centering_strength, float dimension) {
     Vector3 center_of_mass = calculate_center_of_mass(physics_nodes);
     
     for (auto& node : physics_nodes) {
         Vector3 to_center = center_of_mass - node.position;
+        to_center.y *= axis_weight(dimension, 1.0f);
+        to_center.z *= axis_weight(dimension, 2.0f);
         node.force = node.force + (to_center * centering_strength);
     }
 }
@@ -187,6 +196,22 @@ void ForceLayoutEngine::integrate_physics(std::vector<NodePhysics>& physics_node
         // Apply decay (damping)
         node.velocity = node.velocity * decay;
         
+        // Apply fractional-dimension axis damping and small jitter if near-plane
+        float wy = axis_weight(dimension, 1.0f);
+        float wz = axis_weight(dimension, 2.0f);
+        node.velocity.y *= wy;
+        node.velocity.z *= wz;
+        if (wy > 0.05f && std::abs(node.position.y) < 1e-3f && std::abs(node.velocity.y) < 1e-4f) {
+            static thread_local std::mt19937 rng(std::random_device{}());
+            std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+            node.velocity.y += dist(rng) * 0.02f * wy;
+        }
+        if (wz > 0.05f && std::abs(node.position.z) < 1e-3f && std::abs(node.velocity.z) < 1e-4f) {
+            static thread_local std::mt19937 rng2(std::random_device{}());
+            std::uniform_real_distribution<float> dist2(-1.0f, 1.0f);
+            node.velocity.z += dist2(rng2) * 0.02f * wz;
+        }
+        
         // Update position
         node.position = node.position + (node.velocity * dt);
         
@@ -194,14 +219,6 @@ void ForceLayoutEngine::integrate_physics(std::vector<NodePhysics>& physics_node
         node.position.x = std::max(-max_position, std::min(node.position.x, max_position));
         node.position.y = std::max(-max_position, std::min(node.position.y, max_position));
         node.position.z = std::max(-max_position, std::min(node.position.z, max_position));
-        
-        // Constrain to dimension (like swaptube does)
-        if (dimension < 3.0f) {
-            node.position.z *= std::max(0.0f, dimension - 2.0f);
-        }
-        if (dimension < 2.0f) {
-            node.position.y *= std::max(0.0f, dimension - 1.0f);
-        }
     }
 }
 

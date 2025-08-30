@@ -99,6 +99,7 @@ public:
     // UI font
     sf::Font ui_font;
     bool ui_font_loaded;
+    float render_dimension = 3.0f; // 1..3 for render-space scaling
     
     GraphRenderer();
     ~GraphRenderer();
@@ -169,6 +170,20 @@ private:
     float slider_vertical_spacing = 38.0f;
     bool ui_mouse_captured = false;
     bool is_mouse_over_ui(const sf::Vector2f& mps) const;
+
+    // Render-dimension helpers
+    inline float axis_weight_render(float dimension, float axisIndex) const {
+        float t = std::min(1.0f, std::max(0.0f, dimension - axisIndex));
+        return t; // for pure 2D, axis weight becomes 0
+    }
+    inline Vector3 scale_for_render(const Vector3& v) const {
+        float wy = axis_weight_render(render_dimension, 1.0f);
+        float wz = axis_weight_render(render_dimension, 2.0f);
+        return Vector3(v.x, v.y * wy, v.z * wz);
+    }
+public:
+    void set_render_dimension(float d) { render_dimension = std::max(1.0f, std::min(3.0f, d)); }
+    float get_render_dimension() const { return render_dimension; }
 };
 
 sf::Texture pixels_to_sfml_texture(const Pixels& pixels);

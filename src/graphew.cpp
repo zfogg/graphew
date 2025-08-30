@@ -109,10 +109,6 @@ int main(int argc, char* argv[]) {
             inventory_dims = {"ore_red", "battery_red", "time"}; // fallback with time
         }
         
-        std::cout << "Mapping inventory dimensions to 3D space:" << std::endl;
-        std::cout << "X-axis: " << inventory_dims[0] << std::endl;
-        std::cout << "Y-axis: " << inventory_dims[1] << std::endl;
-        std::cout << "Z-axis: " << inventory_dims[2] << std::endl;
         
         AgentGraphBuilder::build_inventory_dimensional_graph(replay, *graph3d, inventory_dims);
         
@@ -217,6 +213,8 @@ int main(int argc, char* argv[]) {
     renderer->add_slider("Decay", &layout_params.decay, 0.3f, 0.99f);
     renderer->add_slider("Centering", &layout_params.centering_strength, 0.0f, 1.0f);
     renderer->add_slider("Dimension", &layout_params.dimension, 1.0f, 3.0f);
+    float render_dim = 3.0f;
+    renderer->add_slider("RenderDim", &render_dim, 1.0f, 3.0f);
     
     // Continuous force layout (toggle with 'T')
     int layout_iterations_remaining = layout_params.iterations;
@@ -225,6 +223,8 @@ int main(int argc, char* argv[]) {
         float delta_time = clock.restart().asSeconds();
         
         renderer->update_camera();
+        // Sync render dimension from slider
+        renderer->set_render_dimension(render_dim);
         
         // Controls
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::P)) {
