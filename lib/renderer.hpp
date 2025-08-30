@@ -4,6 +4,8 @@
 #include <SFML/Window.hpp>
 #include <SFML/System.hpp>
 #include <array>
+#include <vector>
+#include <string>
 #include "graph.hpp"
 #include "swaptube_pixels.hpp"
 
@@ -123,8 +125,24 @@ public:
     Pixels create_help_overlay();
     bool show_help;
     
+    // Simple UI sliders
+    struct UISlider {
+        std::string label;
+        float* target;
+        float min_value;
+        float max_value;
+        float last_value;
+        sf::FloatRect rect_px; // in screen pixels
+        bool dragging;
+        UISlider() : target(nullptr), min_value(0), max_value(1), last_value(0), rect_px(), dragging(false) {}
+    };
+    
+    void clear_sliders();
+    void add_slider(const std::string& label, float* target, float min_value, float max_value);
+    
 private:
     void handle_events();
+    void handle_ui_event(const sf::Event& ev);
     void handle_camera_movement(float delta_time);
     void draw_grid();
     void draw_axes();
@@ -138,6 +156,8 @@ private:
     void draw_3d_sphere(const Vector3& center, float radius, const sf::Color& color);
     void load_ui_font();
     void draw_help_overlay_sfml();
+    void draw_ui_sliders();
+    std::vector<UISlider> ui_sliders;
 };
 
 sf::Texture pixels_to_sfml_texture(const Pixels& pixels);

@@ -140,6 +140,12 @@ int main(int argc, char* argv[]) {
         std::cerr << "Warning: No edges created - agents may not have changed inventory states\n";
     }
     
+    // Center camera on graph data immediately after loading
+    Vector3 min_bounds, max_bounds;
+    renderer->calculate_graph_bounds(*graph3d, min_bounds, max_bounds);
+    std::cout << "Graph centered - bounds: (" << min_bounds.x << "," << min_bounds.y << "," << min_bounds.z 
+              << ") to (" << max_bounds.x << "," << max_bounds.y << "," << max_bounds.z << ")" << std::endl;
+    
     // Print enhanced camera and lighting controls
     std::cout << "\n╔══════════════════════════════════════════════════════════════╗\n";
     std::cout << "║              ENHANCED CAMERA & LIGHTING CONTROLS              ║\n";
@@ -228,8 +234,13 @@ int main(int argc, char* argv[]) {
             }
         }
         
+<<<<<<< HEAD
         // Toggle continuous force layout with 'T'
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::T)) {
+=======
+        // R key restarts force layout simulation (no camera reset)
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R)) {
+>>>>>>> 80439256645ee1f68eb87e261d0f9cccb709a1b9
             static sf::Clock key_timer;
             if (key_timer.getElapsedTime().asSeconds() > 0.5f) {
                 force_layout_running = !force_layout_running;
