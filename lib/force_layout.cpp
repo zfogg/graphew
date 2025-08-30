@@ -1,0 +1,168 @@
+#include "force_layout.hpp"
+#include <cmath>
+#include <iostream>
+#include <random>
+
+void ForceLayoutEngine::apply_force_layout(Graph3D& graph, const PhysicsParams& params) {
+    if (graph.node_count == 0) return;
+    
+    std::cout << "Applying force layout with " << params.iterations << " iterations" << std::endl;
+    
+    // Initialize physics nodes with smart data-driven positions
+    std::vector<NodePhysics> physics_nodes(graph.node_count);
+    
+    for (uint32_t i = 0; i < graph.node_count; i++) {
+        physics_nodes[i].node_id = i;
+        
+        // Start with the existing node position as initial guess
+        // This preserves any meaningful spatial relationships from data
+        physics_nodes[i].position = graph.nodes[i].position;
+        
+        // If position is at origin, use smart initialization based on node properties
+        if (physics_nodes[i].position.length() < 0.1f) {
+            // Use node color as a hint for positioning
+            float hue = static_cast<float>(graph.nodes[i].color.r + graph.nodes[i].color.g + graph.nodes[i].color.b) / 765.0f;
+            float radius = 2.0f + hue * 3.0f;
+            float angle = i * 0.618f * 2.0f * M_PI; // Golden angle
+            
+            physics_nodes[i].position = Vector3(
+                radius * std::cos(angle),
+                radius * std::sin(angle),
+                (hue - 0.5f) * 4.0f  // Spread in Z based on color
+            );
+        }
+        
+        physics_nodes[i].velocity = Vector3(0, 0, 0);
+        physics_nodes[i].force = Vector3(0, 0, 0);
+    }
+    
+    // Run physics simulation
+    for (int iteration = 0; iteration < params.iterations; iteration++) {
+        // Reset forces
+        for (auto& node : physics_nodes) {
+            node.force = Vector3(0, 0, 0);
+        }
+        
+        // Compute all forces
+        compute_repulsion_forces(physics_nodes, params.repel);
+        compute_attraction_forces(physics_nodes, graph, params.attract);
+        apply_centering_force(physics_nodes, params.centering_strength);
+        
+        // Integrate physics
+        integrate_physics(physics_nodes, params.decay, params.dimension);
+        
+        if (iteration % 10 == 0) {
+            std::cout << "Physics iteration " << iteration << "/" << params.iterations << std::endl;
+        }
+    }
+    
+    // Copy final positions back to graph
+    for (uint32_t i = 0; i < graph.node_count; i++) {
+        graph.nodes[i].position = physics_nodes[i].position;
+    }
+    
+    std::cout << "Force layout complete!" << std::endl;
+}
+
+void ForceLayoutEngine::compute_repulsion_forces(std::vector<NodePhysics>& physics_nodes, float repel_strength) {
+    const float min_distance = 0.1f;
+    
+    for (size_t i = 0; i < physics_nodes.size(); i++) {
+        for (size_t j = i + 1; j < physics_nodes.size(); j++) {
+            Vector3 diff = physics_nodes[i].position - physics_nodes[j].position;
+            float distance = diff.length();
+            
+            if (distance < min_distance) distance = min_distance;
+            
+            Vector3 normalized = diff.normalize();
+            float force_magnitude = repel_strength / (distance * distance + 0.01f);
+            Vector3 force = normalized * force_magnitude;
+            
+            physics_nodes[i].force = physics_nodes[i].force + force;
+            physics_nodes[j].force = physics_nodes[j].force - force;
+        }
+    }
+}
+
+void ForceLayoutEngine::compute_attraction_forces(std::vector<NodePhysics>& physics_nodes, 
+                                                  const Graph3D& graph, float attract_strength) {
+    const float max_distance = 50.0f;
+    
+    for (uint32_t e = 0; e < graph.edge_count; e++) {
+        const GraphEdge& edge = graph.edges[e];
+        if (!edge.visible) continue;
+        
+        uint32_t from_id = edge.from_id;
+        uint32_t to_id = edge.to_id;
+        
+        if (from_id >= physics_nodes.size() || to_id >= physics_nodes.size()) continue;
+        
+        Vector3 diff = physics_nodes[to_id].position - physics_nodes[from_id].position;
+        float distance = diff.length();
+        
+        if (distance > max_distance) distance = max_distance;
+        if (distance < 0.1f) continue;
+        
+        Vector3 normalized = diff.normalize();
+        float force_magnitude = attract_strength * distance;
+        Vector3 force = normalized * force_magnitude;
+        
+        physics_nodes[from_id].force = physics_nodes[from_id].force + force;
+        physics_nodes[to_id].force = physics_nodes[to_id].force - force;
+    }
+}
+
+void ForceLayoutEngine::apply_centering_force(std::vector<NodePhysics>& physics_nodes, float centering_strength) {
+    Vector3 center_of_mass = calculate_center_of_mass(physics_nodes);
+    
+    for (auto& node : physics_nodes) {
+        Vector3 to_center = center_of_mass - node.position;
+        node.force = node.force + (to_center * centering_strength);
+    }
+}
+
+void ForceLayoutEngine::integrate_physics(std::vector<NodePhysics>& physics_nodes, float decay, float dimension) {
+    const float dt = 0.01f; // Much smaller timestep for stability
+    const float max_velocity = 10.0f;
+    const float max_position = 50.0f;
+    
+    for (auto& node : physics_nodes) {
+        // Update velocity with smaller timestep
+        node.velocity = node.velocity + (node.force * dt);
+        
+        // Clamp velocity to prevent explosion
+        float vel_magnitude = node.velocity.length();
+        if (vel_magnitude > max_velocity) {
+            node.velocity = node.velocity * (max_velocity / vel_magnitude);
+        }
+        
+        // Apply decay (damping)
+        node.velocity = node.velocity * decay;
+        
+        // Update position
+        node.position = node.position + (node.velocity * dt);
+        
+        // Clamp positions to prevent runaway
+        node.position.x = std::max(-max_position, std::min(node.position.x, max_position));
+        node.position.y = std::max(-max_position, std::min(node.position.y, max_position));
+        node.position.z = std::max(-max_position, std::min(node.position.z, max_position));
+        
+        // Constrain to dimension (like swaptube does)
+        if (dimension < 3.0f) {
+            node.position.z *= std::max(0.0f, dimension - 2.0f);
+        }
+        if (dimension < 2.0f) {
+            node.position.y *= std::max(0.0f, dimension - 1.0f);
+        }
+    }
+}
+
+Vector3 ForceLayoutEngine::calculate_center_of_mass(const std::vector<NodePhysics>& physics_nodes) {
+    Vector3 sum(0, 0, 0);
+    
+    for (const auto& node : physics_nodes) {
+        sum = sum + node.position;
+    }
+    
+    return sum * (1.0f / physics_nodes.size());
+}

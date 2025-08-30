@@ -47,6 +47,8 @@ public:
 private:
     static bool parse_json_data(const char* json_str, ReplayData& replay_data);
     static void parse_timestamp_array(cJSON* array, std::vector<TimestampValue>& output);
+    static void parse_objects_inventory(cJSON* inventory_array, AgentInventoryState& agent, 
+                                       const std::vector<std::string>& item_names);
     static Vector3 parse_location_array(cJSON* location_array);
 };
 

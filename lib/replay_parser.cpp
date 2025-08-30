@@ -1,5 +1,6 @@
 #include "replay_parser.hpp"
 #include "fileutils.hpp"
+#include "force_layout.hpp"
 #include <cjson/cJSON.h>
 #include <cmath>
 #include <iostream>
@@ -104,19 +105,42 @@ bool ReplayParser::parse_json_data(const char* json_str, ReplayData& replay_data
     cJSON* json = cJSON_Parse(json_str);
     if (!json) return false;
     
-    // Parse inventory items list
-    cJSON* inventory_items = cJSON_GetObjectItem(json, "inventory_items");
-    if (cJSON_IsArray(inventory_items)) {
-        cJSON* item;
-        cJSON_ArrayForEach(item, inventory_items) {
-            if (cJSON_IsString(item)) {
-                replay_data.inventory_items.push_back(cJSON_GetStringValue(item));
+    // Detect format type and parse inventory items list
+    bool is_grid_objects_format = cJSON_GetObjectItem(json, "grid_objects") != nullptr;
+    bool is_objects_format = cJSON_GetObjectItem(json, "objects") != nullptr;
+    
+    if (is_grid_objects_format) {
+        // Parse grid_objects format (sample.json)
+        cJSON* inventory_items = cJSON_GetObjectItem(json, "inventory_items");
+        if (cJSON_IsArray(inventory_items)) {
+            cJSON* item;
+            cJSON_ArrayForEach(item, inventory_items) {
+                if (cJSON_IsString(item)) {
+                    replay_data.inventory_items.push_back(cJSON_GetStringValue(item));
+                }
+            }
+        }
+    } else if (is_objects_format) {
+        // Parse objects format (sample2.json, sample3.json)
+        cJSON* item_names = cJSON_GetObjectItem(json, "item_names");
+        if (cJSON_IsArray(item_names)) {
+            cJSON* item;
+            cJSON_ArrayForEach(item, item_names) {
+                if (cJSON_IsString(item)) {
+                    replay_data.inventory_items.push_back(cJSON_GetStringValue(item));
+                }
             }
         }
     }
     
-    // Parse object types
-    cJSON* object_types = cJSON_GetObjectItem(json, "object_types");
+    // Parse object types (different field names)
+    cJSON* object_types = nullptr;
+    if (is_grid_objects_format) {
+        object_types = cJSON_GetObjectItem(json, "object_types");
+    } else if (is_objects_format) {
+        object_types = cJSON_GetObjectItem(json, "type_names");
+    }
+    
     if (cJSON_IsArray(object_types)) {
         cJSON* type;
         cJSON_ArrayForEach(type, object_types) {
@@ -126,15 +150,28 @@ bool ReplayParser::parse_json_data(const char* json_str, ReplayData& replay_data
         }
     }
     
-    // Parse grid objects and extract agents
-    cJSON* grid_objects = cJSON_GetObjectItem(json, "grid_objects");
-    if (cJSON_IsArray(grid_objects)) {
+    // Parse agents from either format
+    cJSON* objects_array = nullptr;
+    if (is_grid_objects_format) {
+        objects_array = cJSON_GetObjectItem(json, "grid_objects");
+    } else if (is_objects_format) {
+        objects_array = cJSON_GetObjectItem(json, "objects");
+    }
+    
+    if (cJSON_IsArray(objects_array)) {
         cJSON* obj;
-        cJSON_ArrayForEach(obj, grid_objects) {
-            cJSON* type = cJSON_GetObjectItem(obj, "type");
+        cJSON_ArrayForEach(obj, objects_array) {
+            // Check for agent type in both formats
+            bool is_agent = false;
+            if (is_grid_objects_format) {
+                cJSON* type = cJSON_GetObjectItem(obj, "type");
+                is_agent = (cJSON_IsNumber(type) && cJSON_GetNumberValue(type) == 0);
+            } else if (is_objects_format) {
+                cJSON* type_id = cJSON_GetObjectItem(obj, "type_id");
+                is_agent = (cJSON_IsNumber(type_id) && cJSON_GetNumberValue(type_id) == 0);
+            }
             
-            // Only process agents (type 0)
-            if (cJSON_IsNumber(type) && cJSON_GetNumberValue(type) == 0) {
+            if (is_agent) {
                 AgentInventoryState agent;
                 
                 cJSON* agent_id = cJSON_GetObjectItem(obj, "agent_id");
@@ -155,26 +192,46 @@ bool ReplayParser::parse_json_data(const char* json_str, ReplayData& replay_data
                     }
                 }
                 
-                // Parse inventory data for each item
-                for (const std::string& item : replay_data.inventory_items) {
-                    std::string inv_key = "inv:" + item;
-                    cJSON* inv_data = cJSON_GetObjectItem(obj, inv_key.c_str());
-                    if (cJSON_IsArray(inv_data)) {
-                        std::vector<TimestampValue> values;
-                        parse_timestamp_array(inv_data, values);
-                        agent.inventory_over_time[item] = values;
+                // Parse inventory data based on format
+                if (is_grid_objects_format) {
+                    // grid_objects format: "inv:item_name" arrays
+                    for (const std::string& item : replay_data.inventory_items) {
+                        std::string inv_key = "inv:" + item;
+                        cJSON* inv_data = cJSON_GetObjectItem(obj, inv_key.c_str());
+                        if (cJSON_IsArray(inv_data)) {
+                            std::vector<TimestampValue> values;
+                            parse_timestamp_array(inv_data, values);
+                            agent.inventory_over_time[item] = values;
+                        }
                     }
-                }
-                
-                // Parse reward data
-                cJSON* reward = cJSON_GetObjectItem(obj, "reward");
-                if (cJSON_IsArray(reward)) {
-                    parse_timestamp_array(reward, agent.reward_over_time);
-                }
-                
-                cJSON* total_reward = cJSON_GetObjectItem(obj, "total_reward");
-                if (cJSON_IsArray(total_reward)) {
-                    parse_timestamp_array(total_reward, agent.total_reward_over_time);
+                    
+                    // Parse reward data
+                    cJSON* reward = cJSON_GetObjectItem(obj, "reward");
+                    if (cJSON_IsArray(reward)) {
+                        parse_timestamp_array(reward, agent.reward_over_time);
+                    }
+                    
+                    cJSON* total_reward = cJSON_GetObjectItem(obj, "total_reward");
+                    if (cJSON_IsArray(total_reward)) {
+                        parse_timestamp_array(total_reward, agent.total_reward_over_time);
+                    }
+                } else if (is_objects_format) {
+                    // objects format: "inventory" with item_id arrays
+                    cJSON* inventory = cJSON_GetObjectItem(obj, "inventory");
+                    if (cJSON_IsArray(inventory)) {
+                        parse_objects_inventory(inventory, agent, replay_data.inventory_items);
+                    }
+                    
+                    // Parse reward data (different structure)
+                    cJSON* current_reward = cJSON_GetObjectItem(obj, "current_reward");
+                    if (cJSON_IsArray(current_reward)) {
+                        parse_timestamp_array(current_reward, agent.reward_over_time);
+                    }
+                    
+                    cJSON* total_reward = cJSON_GetObjectItem(obj, "total_reward");
+                    if (cJSON_IsArray(total_reward)) {
+                        parse_timestamp_array(total_reward, agent.total_reward_over_time);
+                    }
                 }
                 
                 replay_data.add_agent(agent);
@@ -203,6 +260,41 @@ void ReplayParser::parse_timestamp_array(cJSON* array, std::vector<TimestampValu
             int timestep = static_cast<int>(cJSON_GetNumberValue(cJSON_GetArrayItem(entry, 0)));
             float value = static_cast<float>(cJSON_GetNumberValue(cJSON_GetArrayItem(entry, 1)));
             output.emplace_back(timestep, value);
+        }
+    }
+}
+
+void ReplayParser::parse_objects_inventory(cJSON* inventory_array, AgentInventoryState& agent, 
+                                          const std::vector<std::string>& item_names) {
+    if (!cJSON_IsArray(inventory_array)) return;
+    
+    // Initialize inventory tracking for all items
+    for (const std::string& item : item_names) {
+        agent.inventory_over_time[item] = std::vector<TimestampValue>();
+    }
+    
+    cJSON* inv_entry;
+    cJSON_ArrayForEach(inv_entry, inventory_array) {
+        if (!cJSON_IsArray(inv_entry) || cJSON_GetArraySize(inv_entry) < 2) continue;
+        
+        int timestep = static_cast<int>(cJSON_GetNumberValue(cJSON_GetArrayItem(inv_entry, 0)));
+        cJSON* items_array = cJSON_GetArrayItem(inv_entry, 1);
+        
+        if (!cJSON_IsArray(items_array)) continue;
+        
+        // Parse each item in inventory at this timestep
+        cJSON* item_entry;
+        cJSON_ArrayForEach(item_entry, items_array) {
+            if (!cJSON_IsArray(item_entry) || cJSON_GetArraySize(item_entry) < 2) continue;
+            
+            int item_id = static_cast<int>(cJSON_GetNumberValue(cJSON_GetArrayItem(item_entry, 0)));
+            float quantity = static_cast<float>(cJSON_GetNumberValue(cJSON_GetArrayItem(item_entry, 1)));
+            
+            // Map item_id to item name
+            if (item_id >= 0 && item_id < static_cast<int>(item_names.size())) {
+                const std::string& item_name = item_names[item_id];
+                agent.inventory_over_time[item_name].emplace_back(timestep, quantity);
+            }
         }
     }
 }
@@ -268,15 +360,19 @@ void AgentGraphBuilder::build_inventory_dimensional_graph(const ReplayData& repl
             
             // Add node if this state is new
             if (state_to_node_id.find(state_sig) == state_to_node_id.end()) {
-                // Generate position based on state properties, not coordinates
-                float angle = static_cast<float>(state_to_node_id.size()) * 0.618f; // Golden angle
-                float radius = 3.0f + static_cast<float>(reward_bucket) * 0.5f;
-                float height = static_cast<float>(reward_bucket) * 2.0f;
+                // Smart initialization based on inventory state properties
+                float ore_qty = 0, battery_qty = 0, heart_qty = 0;
+                for (const std::string& item : inventory_dims) {
+                    if (item == "ore_red") ore_qty = agent.get_inventory_at_time(item, timestep);
+                    else if (item == "battery_red") battery_qty = agent.get_inventory_at_time(item, timestep);
+                    else if (item == "heart") heart_qty = agent.get_inventory_at_time(item, timestep);
+                }
                 
+                // Initialize position based on actual inventory quantities (smart grid)
                 Vector3 position(
-                    radius * std::cos(angle),
-                    height,
-                    radius * std::sin(angle)
+                    ore_qty * 2.0f,      // X-axis: ore quantity
+                    battery_qty * 3.0f,  // Y-axis: battery quantity  
+                    heart_qty * 1.5f     // Z-axis: heart quantity
                 );
                 
                 Color color = reward_to_color(static_cast<float>(reward_bucket), 10.0f);
@@ -291,30 +387,107 @@ void AgentGraphBuilder::build_inventory_dimensional_graph(const ReplayData& repl
         }
     }
     
-    // Create edges between similar states (representing possible transitions)
-    for (size_t i = 0; i < node_id_to_state.size(); i++) {
-        for (size_t j = i + 1; j < node_id_to_state.size(); j++) {
-            // Connect states that differ by small inventory changes
-            const std::string& state1 = node_id_to_state[i];
-            const std::string& state2 = node_id_to_state[j];
+    // Create edges based on actual temporal agent transitions
+    std::map<std::pair<std::string, std::string>, int> transition_count;
+    
+    // Track agent state transitions over time
+    for (const auto& agent : replay.agents) {
+        std::vector<int> key_timesteps;
+        
+        // Get all timesteps where inventory changes
+        for (const auto& [item, values] : agent.inventory_over_time) {
+            for (const auto& tv : values) {
+                key_timesteps.push_back(tv.timestep);
+            }
+        }
+        for (const auto& tv : agent.total_reward_over_time) {
+            key_timesteps.push_back(tv.timestep);
+        }
+        
+        // Sort and remove duplicates
+        std::sort(key_timesteps.begin(), key_timesteps.end());
+        key_timesteps.erase(std::unique(key_timesteps.begin(), key_timesteps.end()), key_timesteps.end());
+        
+        // Create state signatures for consecutive timesteps
+        for (size_t t = 0; t < key_timesteps.size() - 1; t++) {
+            int current_time = key_timesteps[t];
+            int next_time = key_timesteps[t + 1];
             
-            // Simple heuristic: connect if states are "similar" 
-            // (In real implementation, this would use actual game transition rules)
-            if (state1.length() == state2.length()) {
-                int differences = 0;
-                for (size_t k = 0; k < state1.length(); k++) {
-                    if (state1[k] != state2[k]) differences++;
+            // Generate state signatures for current and next states
+            auto create_state_sig = [&](int timestep) -> std::string {
+                std::string sig = "";
+                for (const std::string& item : inventory_dims) {
+                    if (item == "time") {
+                        sig += "T" + std::to_string(timestep / 100) + "_";
+                    } else {
+                        int qty = static_cast<int>(agent.get_inventory_at_time(item, timestep));
+                        sig += item + std::to_string(qty) + "_";
+                    }
                 }
-                
-                // Connect if only a few characters differ (indicating small inventory change)
-                if (differences >= 2 && differences <= 8) {
-                    graph3d.add_edge(static_cast<uint32_t>(i), static_cast<uint32_t>(j), GRAY, 1.0f);
-                }
+                int reward_bucket = static_cast<int>(agent.get_total_reward_at_time(timestep));
+                sig += "R" + std::to_string(reward_bucket);
+                return sig;
+            };
+            
+            std::string current_state = create_state_sig(current_time);
+            std::string next_state = create_state_sig(next_time);
+            
+            // Only create transition if states are different
+            if (current_state != next_state) {
+                transition_count[{current_state, next_state}]++;
             }
         }
     }
     
+    // Create edges from observed transitions
+    for (const auto& [transition, count] : transition_count) {
+        const std::string& from_state = transition.first;
+        const std::string& to_state = transition.second;
+        
+        auto from_iter = state_to_node_id.find(from_state);
+        auto to_iter = state_to_node_id.find(to_state);
+        
+        if (from_iter != state_to_node_id.end() && to_iter != state_to_node_id.end()) {
+            uint32_t from_id = from_iter->second;
+            uint32_t to_id = to_iter->second;
+            
+            // Extract reward levels for edge styling
+            int from_reward = 0, to_reward = 0;
+            size_t r_pos = from_state.find('R');
+            if (r_pos != std::string::npos) from_reward = std::stoi(from_state.substr(r_pos + 1));
+            r_pos = to_state.find('R');
+            if (r_pos != std::string::npos) to_reward = std::stoi(to_state.substr(r_pos + 1));
+            
+            // Color edges based on reward change
+            Color edge_color;
+            if (to_reward > from_reward) {
+                edge_color = Color(100, 255, 100, 255); // Green for reward increase
+            } else if (to_reward < from_reward) {
+                edge_color = Color(255, 100, 100, 255); // Red for reward decrease
+            } else {
+                edge_color = GRAY; // Gray for no reward change
+            }
+            
+            // Thickness based on transition frequency
+            float thickness = 1.0f + static_cast<float>(count) * 0.5f;
+            
+            graph3d.add_edge(from_id, to_id, edge_color, thickness);
+        }
+    }
+    
+    std::cout << "Created " << transition_count.size() << " temporal transitions between states\n";
+    
     std::cout << "Created " << state_to_node_id.size() << " unique inventory states\n";
+    
+    // Apply force-directed layout like swaptube does
+    ForceLayoutEngine::PhysicsParams params;
+    params.repel = 0.5f;      // Swaptube-like repulsion
+    params.attract = 0.1f;    // Swaptube-like attraction
+    params.decay = 0.8f;      // Swaptube-like decay
+    params.iterations = 200;  // Much more iterations like swaptube
+    params.dimension = 3.0f;
+    
+    ForceLayoutEngine::apply_force_layout(graph3d, params);
 }
 
 void AgentGraphBuilder::build_temporal_graph(const ReplayData& replay, Graph3D& graph3d, int target_agent_id) {

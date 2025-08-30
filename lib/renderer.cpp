@@ -5,7 +5,7 @@
 GraphRenderer::GraphRenderer() 
     : zoom_level(1.0f), zoom_speed(0.1f), view_center(0, 0),
       camera_position(0, 0, 15), camera_target(0, 0, 0), camera_distance(15.0f),
-      camera_angle_h(0.0f), camera_angle_v(0.3f), auto_rotate(true), auto_rotate_speed(0.5f) {
+      camera_angle_h(0.0f), camera_angle_v(0.3f), auto_rotate(true), auto_rotate_speed(0.3f) {
 }
 
 GraphRenderer::~GraphRenderer() {
@@ -238,36 +238,23 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         sf::Vector2f from_pos = world_to_screen_3d(from_node.position);
         sf::Vector2f to_pos = world_to_screen_3d(to_node.position);
         
-        // Make edges visible with good contrast and thickness
-        sf::Color edge_color(200, 200, 200, 180); // Light gray, semi-transparent
-        
-        // Draw multiple lines for thickness
-        for (int offset = -1; offset <= 1; offset++) {
-            sf::Vector2f offset_from = from_pos + sf::Vector2f(offset, 0);
-            sf::Vector2f offset_to = to_pos + sf::Vector2f(offset, 0);
-            
-            sf::Vertex v1, v2;
-            v1.position = offset_from;
-            v1.color = edge_color;
-            v2.position = offset_to;
-            v2.color = edge_color;
-            edge_vertices.push_back(v1);
-            edge_vertices.push_back(v2);
-            
-            // Also add vertical offset for extra thickness
-            if (offset == 0) {
-                sf::Vector2f v_offset_from = from_pos + sf::Vector2f(0, 1);
-                sf::Vector2f v_offset_to = to_pos + sf::Vector2f(0, 1);
-                
-                sf::Vertex v3, v4;
-                v3.position = v_offset_from;
-                v3.color = edge_color;
-                v4.position = v_offset_to;
-                v4.color = edge_color;
-                edge_vertices.push_back(v3);
-                edge_vertices.push_back(v4);
-            }
+        // Debug: Check edge coordinates
+        if (i < 3) {
+            std::cout << "Edge " << i << ": from(" << from_pos.x << "," << from_pos.y 
+                     << ") to(" << to_pos.x << "," << to_pos.y << ")" << std::endl;
         }
+        
+        // Make edges highly visible for debugging
+        sf::Color edge_color = sf::Color::Red; // Bright red for visibility
+        
+        // Simple single line for now
+        sf::Vertex v1, v2;
+        v1.position = from_pos;
+        v1.color = edge_color;
+        v2.position = to_pos;
+        v2.color = edge_color;
+        edge_vertices.push_back(v1);
+        edge_vertices.push_back(v2);
     }
     
     if (!edge_vertices.empty()) {
