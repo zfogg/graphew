@@ -169,21 +169,25 @@ void GraphRenderer::handle_events() {
             handle_ui_event(*event);
         }
         else if (auto* mouseWheel = event->getIf<sf::Event::MouseWheelScrolled>()) {
-            float delta = mouseWheel->delta;
-            
-            // Shift+scroll adjusts FOV
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift)) {
-                field_of_view = std::max(20.0f, std::min(120.0f, field_of_view - delta * 5.0f));
-                std::cout << "FOV: " << field_of_view << "°" << std::endl;
-            }
-            // Ctrl+scroll adjusts camera speed
-            else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
-                camera_move_speed = std::max(1.0f, std::min(50.0f, camera_move_speed + delta * 2.0f));
-                std::cout << "Camera speed: " << camera_move_speed << std::endl;
-            }
-            // Normal scroll for zoom - allow much closer inspection
-            else {
-                camera_distance = std::max(1.0f, std::min(200.0f, camera_distance - delta * 2.0f));
+            // Ignore when over UI
+            sf::Vector2i mp = sf::Mouse::getPosition(window);
+            sf::Vector2f mps(static_cast<float>(mp.x), static_cast<float>(mp.y));
+            if (!is_mouse_over_ui(mps)) {
+                float delta = mouseWheel->delta;
+                // Shift+scroll adjusts FOV
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift)) {
+                    field_of_view = std::max(20.0f, std::min(120.0f, field_of_view - delta * 5.0f));
+                    std::cout << "FOV: " << field_of_view << "°" << std::endl;
+                }
+                // Ctrl+scroll adjusts camera speed
+                else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
+                    camera_move_speed = std::max(1.0f, std::min(50.0f, camera_move_speed + delta * 2.0f));
+                    std::cout << "Camera speed: " << camera_move_speed << std::endl;
+                }
+                // Normal scroll for zoom - allow much closer inspection
+                else {
+                    camera_distance = std::max(1.0f, std::min(200.0f, camera_distance - delta * 2.0f));
+                }
             }
         }
         else if (auto* keyPress = event->getIf<sf::Event::KeyPressed>()) {
@@ -288,7 +292,7 @@ void GraphRenderer::handle_events() {
     }
     
     // Handle mouse dragging for panning
-    if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
+    if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left) && !ui_mouse_captured) {
         sf::Vector2i mouse_pos = sf::Mouse::getPosition(window);
         sf::Vector2f current_mouse = static_cast<sf::Vector2f>(mouse_pos);
         
