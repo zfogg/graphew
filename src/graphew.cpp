@@ -191,20 +191,18 @@ int main(int argc, char* argv[]) {
     sf::Clock clock;
     bool physics_enabled = true;
     bool show_overlay = true;
-    bool force_layout_running = false;
+    bool force_layout_running = true; // continuous by default
     
     // Setup force layout parameters for real-time simulation
     ForceLayoutEngine::PhysicsParams layout_params;
     layout_params.repel = 5.0f;
     layout_params.attract = 1.0f;
     layout_params.decay = 0.6f;
-    layout_params.iterations = 10000; // Apply in small batches per frame
+    layout_params.iterations = 1000000000; // effectively infinite when used for step batches
     layout_params.dimension = 3.0f;
     
-    // Start initial force layout simulation
-    std::cout << "Press 'R' to restart force layout simulation" << std::endl;
-    force_layout_running = true;
-    int layout_iterations_remaining = layout_params.iterations; // Total iterations to run
+    // Continuous force layout (toggle with 'T')
+    int layout_iterations_remaining = layout_params.iterations;
     
     while (!renderer->should_close()) {
         float delta_time = clock.restart().asSeconds();
@@ -230,44 +228,20 @@ int main(int argc, char* argv[]) {
             }
         }
         
-        // Override 'R' key to restart force layout instead of just camera reset
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R)) {
+        // Toggle continuous force layout with 'T'
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::T)) {
             static sf::Clock key_timer;
             if (key_timer.getElapsedTime().asSeconds() > 0.5f) {
-                std::cout << "Restarting force layout simulation..." << std::endl;
-                
-                // Reset all nodes to smart initial positions
-                for (uint32_t i = 0; i < graph3d->node_count; i++) {
-                    // Use node color as hint for repositioning
-                    float hue = static_cast<float>(graph3d->nodes[i].color.r + graph3d->nodes[i].color.g + graph3d->nodes[i].color.b) / 765.0f;
-                    float radius = 2.0f + hue * 3.0f;
-                    float angle = i * 0.618f * 2.0f * M_PI;
-                    
-                    graph3d->nodes[i].position = Vector3(
-                        radius * std::cos(angle),
-                        radius * std::sin(angle),
-                        (hue - 0.5f) * 4.0f
-                    );
-                }
-                
-                force_layout_running = true;
-                layout_iterations_remaining = 1000; // Reset iteration count
+                force_layout_running = !force_layout_running;
+                std::cout << "Force layout " << (force_layout_running ? "running" : "paused") << std::endl;
                 key_timer.restart();
             }
         }
         
         // Apply force layout in real-time if running
         if (force_layout_running) {
-            force_layout_running = ForceLayoutEngine::apply_force_layout_step(*graph3d, layout_params, layout_iterations_remaining);
-            
-            // Show progress
-            if (layout_iterations_remaining % 100 == 0 && layout_iterations_remaining > 0) {
-                std::cout << "Force layout: " << layout_iterations_remaining << " iterations remaining" << std::endl;
-            }
-            
-            if (!force_layout_running) {
-                std::cout << "Force layout simulation complete!" << std::endl;
-            }
+            int dummy_remaining = layout_params.iterations; // large number, decremented internally but ignored
+            (void)ForceLayoutEngine::apply_force_layout_step(*graph3d, layout_params, dummy_remaining);
         }
         
         // Regular gentle physics for fine-tuning
