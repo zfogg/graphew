@@ -9,9 +9,9 @@ Graphew transforms AI agent replay data into interactive 3D visualizations that 
 ### Key Features
 
 - **Force-Directed Layouts**: Physics-based graph positioning
-- **Temporal State Transitions**: Edges represent actual agent inventory changes over time
-- **Multi-Agent Support**: Visualize behavior patterns across multiple AI agents simultaneously  
-- **Reward Visualization**: Color-coded nodes show successful vs unsuccessful strategies
+- **Temporal State Transitions**: Edges represent agent inventory changes over time
+- **Multi-Agent Support**: All agents in environment contribute to the graph
+- **Reward Visualization**: Green (high reward) to Red (low reward) color-coded nodes
 - **Real-Time 3D Graphics**: SFML-powered interactive rendering with smooth camera controls
 - **Universal Format Support**: Handles both `.grid_objects` and `.objects` replay formats
 - **Compressed File Support**: Native zlib decompression for `.json.z` replay files

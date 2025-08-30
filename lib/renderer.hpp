@@ -35,6 +35,13 @@ struct LightingParams {
     float fog_density;
     float fog_start;
     float fog_end;
+    // Advanced shading
+    float specular_intensity;   // strength of specular highlight
+    float shininess;            // specular exponent
+    float rim_intensity;        // rim (Fresnel-like) intensity
+    float contour_intensity;    // strength of height contour effect
+    float contour_frequency;    // frequency of contour bands
+    float contour_offset;       // phase/offset of contour bands
     
     LightingParams() : directional_light_dir(0.5f, -0.7f, 0.5f), 
                        directional_intensity(0.8f),
@@ -43,7 +50,13 @@ struct LightingParams {
                        shadows_enabled(false),
                        fog_density(0.02f),
                        fog_start(10.0f),
-                       fog_end(50.0f) {}
+                       fog_end(50.0f),
+                       specular_intensity(0.35f),
+                       shininess(32.0f),
+                       rim_intensity(0.25f),
+                       contour_intensity(0.15f),
+                       contour_frequency(0.25f),
+                       contour_offset(0.0f) {}
 };
 
 class GraphRenderer {
@@ -79,6 +92,11 @@ public:
     LightingParams lighting;
     bool show_axes;
     bool show_grid;
+    Vector3 scene_center;
+    
+    // UI font
+    sf::Font ui_font;
+    bool ui_font_loaded;
     
     GraphRenderer();
     ~GraphRenderer();
@@ -118,6 +136,8 @@ private:
     float calculate_depth_shade(float depth);
     void draw_3d_line(const Vector3& start, const Vector3& end, const sf::Color& color, float thickness = 1.0f);
     void draw_3d_sphere(const Vector3& center, float radius, const sf::Color& color);
+    void load_ui_font();
+    void draw_help_overlay_sfml();
 };
 
 sf::Texture pixels_to_sfml_texture(const Pixels& pixels);

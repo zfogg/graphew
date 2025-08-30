@@ -8,6 +8,8 @@ GraphRenderer::GraphRenderer()
       camera_angle_h(0.0f), camera_angle_v(0.3f), auto_rotate(false), auto_rotate_speed(0.3f),
       camera_move_speed(10.0f), camera_rotate_speed(2.0f), field_of_view(60.0f),
       smooth_camera(true), camera_velocity(0, 0, 0), show_axes(false), show_grid(true),
+      scene_center(0, 0, 0),
+      ui_font_loaded(false),
       show_help(false) {
     // Initialize default camera presets
     camera_presets[0].position = Vector3(15, 10, 15);
@@ -31,6 +33,7 @@ void GraphRenderer::init_window(const std::string& title) {
     view = window.getDefaultView();
     view.setCenter(view_center);
     window.setView(view);
+    load_ui_font();
 }
 
 void GraphRenderer::handle_events() {
@@ -426,15 +429,27 @@ float GraphRenderer::apply_perspective(float z_depth) {
 }
 
 sf::Color GraphRenderer::apply_lighting(const Vector3& /* position */, const Vector3& normal, const sf::Color& base_color) {
-    // Normalize light direction
+    // Lighting is world-relative: use a fixed world-space light direction
     Vector3 light_dir = lighting.directional_light_dir.normalize();
     
     // Calculate diffuse lighting (Lambertian)
     float dot_product = std::max(0.0f, -(normal.x * light_dir.x + normal.y * light_dir.y + normal.z * light_dir.z));
     float diffuse = lighting.directional_intensity * dot_product;
     
-    // Total light = ambient + diffuse
-    float total_light = std::min(1.0f, lighting.ambient_intensity + diffuse);
+    // View direction assumed towards camera for simple specular/rim
+    Vector3 view_dir = Vector3(0, 0, 1); // approximate in screen space; fine for stylized shading
+    
+    // Blinn-Phong specular highlight
+    Vector3 half_vec = (light_dir + view_dir).normalize();
+    float spec_angle = std::max(0.0f, -(normal.x * half_vec.x + normal.y * half_vec.y + normal.z * half_vec.z));
+    float specular = lighting.specular_intensity * std::pow(spec_angle, lighting.shininess);
+    
+    // Rim lighting (Fresnel-like) enhances silhouettes
+    float ndotv = std::max(0.0f, -(normal.x * view_dir.x + normal.y * view_dir.y + normal.z * view_dir.z));
+    float rim = lighting.rim_intensity * std::pow(1.0f - ndotv, 2.0f);
+    
+    // Total light = ambient + diffuse + specular + rim
+    float total_light = std::min(1.5f, lighting.ambient_intensity + diffuse + specular + rim);
     
     // Apply light color tint
     float r = base_color.r * total_light * (lighting.light_color.r / 255.0f);
@@ -442,9 +457,9 @@ sf::Color GraphRenderer::apply_lighting(const Vector3& /* position */, const Vec
     float b = base_color.b * total_light * (lighting.light_color.b / 255.0f);
     
     return sf::Color(
-        std::min(255.0f, r),
-        std::min(255.0f, g),
-        std::min(255.0f, b),
+        static_cast<unsigned char>(std::min(255.0f, r)),
+        static_cast<unsigned char>(std::min(255.0f, g)),
+        static_cast<unsigned char>(std::min(255.0f, b)),
         base_color.a
     );
 }
@@ -530,17 +545,18 @@ void GraphRenderer::adjust_lighting(float ambient_delta, float directional_delta
 }
 
 void GraphRenderer::rotate_light(float horizontal, float vertical) {
-    // Convert light direction to spherical coordinates
+    // Convert world-space light direction to spherical coordinates
     float length = lighting.directional_light_dir.length();
+    if (length < 1e-4f) length = 1.0f;
     float theta = std::atan2(lighting.directional_light_dir.z, lighting.directional_light_dir.x);
-    float phi = std::acos(lighting.directional_light_dir.y / length);
+    float phi = std::acos(std::max(-1.0f, std::min(1.0f, lighting.directional_light_dir.y / length)));
     
     // Apply rotation
     theta += horizontal;
     phi += vertical;
     phi = std::max(0.1f, std::min(3.14f, phi));
     
-    // Convert back to Cartesian
+    // Convert back to Cartesian (world space)
     lighting.directional_light_dir.x = length * std::sin(phi) * std::cos(theta);
     lighting.directional_light_dir.y = length * std::cos(phi);
     lighting.directional_light_dir.z = length * std::sin(phi) * std::sin(theta);
@@ -644,6 +660,66 @@ Pixels GraphRenderer::create_help_overlay() {
     return help;
 }
 
+void GraphRenderer::load_ui_font() {
+    // Try project font first
+    if (ui_font.openFromFile("assets/fonts/Inter-Regular.ttf")) {
+        ui_font_loaded = true;
+        return;
+    }
+    // Fallbacks (common macOS/Linux paths)
+    const char* fallbacks[] = {
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/Library/Fonts/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
+    };
+    for (const char* path : fallbacks) {
+        if (ui_font.openFromFile(path)) {
+            ui_font_loaded = true;
+            return;
+        }
+    }
+    ui_font_loaded = false;
+}
+
+void GraphRenderer::draw_help_overlay_sfml() {
+    // Panel background
+    sf::RectangleShape panel(sf::Vector2f(620.f, 760.f));
+    panel.setPosition(sf::Vector2f(10.f, 10.f));
+    panel.setFillColor(sf::Color(30, 30, 40, 220));
+    panel.setOutlineThickness(1.0f);
+    panel.setOutlineColor(sf::Color(80, 120, 180, 200));
+    window.draw(panel);
+
+    auto addText = [&](const std::string& s, float x, float y, unsigned size, sf::Color color) {
+        sf::Text t(ui_font);
+        t.setString(s);
+        t.setCharacterSize(size);
+        t.setFillColor(color);
+        t.setPosition(sf::Vector2f(x, y));
+        window.draw(t);
+    };
+
+    float y = 25;
+    addText("Controls", 30.f, y, 28, sf::Color(240,240,255)); y += 40.f;
+
+    addText("Camera", 30.f, y, 22, sf::Color(200,220,255)); y += 28.f;
+    addText("W/S: Forward/Back, A/D: Left/Right, Q/E: Down/Up", 40.f, y, 18, sf::Color(230,230,240)); y += 22.f;
+    addText("Arrows or Right-Drag: Rotate, Left-Drag: Pan", 40.f, y, 18, sf::Color(230,230,240)); y += 22.f;
+    addText("Mouse Wheel: Zoom, Shift+Wheel: FOV, Ctrl+Wheel: Speed", 40.f, y, 18, sf::Color(230,230,240)); y += 28.f;
+
+    addText("Presets", 30.f, y, 22, sf::Color(200,220,255)); y += 28.f;
+    addText("0-9: Load preset, Ctrl+0-9: Save preset, R: Reset", 40.f, y, 18, sf::Color(230,230,240)); y += 28.f;
+
+    addText("Lighting", 30.f, y, 22, sf::Color(200,220,255)); y += 28.f;
+    addText("I/K: Ambient +/-, L/J: Directional +/-, Numpad 4/6/8/2: Rotate light", 40.f, y, 18, sf::Color(230,230,240)); y += 28.f;
+
+    addText("Visuals", 30.f, y, 22, sf::Color(200,220,255)); y += 28.f;
+    addText("F: Fog, G: Grid, X: Axes, O: Info overlay, H: Toggle this help", 40.f, y, 18, sf::Color(230,230,240)); y += 28.f;
+    addText("Space: Auto-rotate, P: Physics", 40.f, y, 18, sf::Color(230,230,240));
+}
+
 void GraphRenderer::calculate_graph_bounds(const Graph3D& graph, Vector3& min_bounds, Vector3& max_bounds) {
     if (graph.node_count == 0) {
         min_bounds = max_bounds = Vector3(0, 0, 0);
@@ -670,6 +746,7 @@ void GraphRenderer::calculate_graph_bounds(const Graph3D& graph, Vector3& min_bo
     float max_dimension = std::max({size.x, size.y, size.z});
     
     camera_target = center;
+    scene_center = center; // use world-relative center for lighting and overlays
     camera_distance = std::min(max_dimension * 1.5f + 10.0f, 100.0f); // Closer camera, max distance cap
     update_camera_position();
 }
@@ -690,6 +767,9 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
     
     draw_grid();
     draw_axes();
+
+    // Precompute camera forward direction for depth calculations
+    Vector3 forward_dir = (camera_target - camera_position).normalize();
     
     // Draw edges with 3D perspective and lighting
     std::vector<sf::Vertex> edge_vertices;
@@ -707,17 +787,22 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         // Calculate depth for fog
         Vector3 edge_center = (from_node.position + to_node.position) * 0.5f;
         Vector3 relative_pos = edge_center - camera_position;
-        Vector3 forward = (camera_target - camera_position).normalize();
-        float depth = relative_pos.x * forward.x + relative_pos.y * forward.y + relative_pos.z * forward.z;
+        float depth = relative_pos.x * forward_dir.x + relative_pos.y * forward_dir.y + relative_pos.z * forward_dir.z;
         
         // Base edge color with transparency based on depth
-        sf::Color edge_color(150, 150, 200, 180);
+        sf::Color edge_color(130, 130, 180, 170);
         
-        // Apply depth shading
+        // Apply depth and subtle contour shading to edges based on midpoint height
         float shade = calculate_depth_shade(depth);
         edge_color.r *= shade;
         edge_color.g *= shade;
         edge_color.b *= shade;
+        float mid_height = edge_center.y - scene_center.y;
+        float band_e = 0.5f + 0.5f * std::sin(mid_height * lighting.contour_frequency + lighting.contour_offset);
+        float contour_mix_e = 1.0f - (lighting.contour_intensity * 0.5f) + (lighting.contour_intensity * 0.5f) * band_e;
+        edge_color.r = static_cast<unsigned char>(std::min(255.0f, edge_color.r * contour_mix_e));
+        edge_color.g = static_cast<unsigned char>(std::min(255.0f, edge_color.g * contour_mix_e));
+        edge_color.b = static_cast<unsigned char>(std::min(255.0f, edge_color.b * contour_mix_e));
         
         // Apply fog
         edge_color = apply_fog(edge_color, depth);
@@ -736,28 +821,49 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         window.draw(edge_vertices.data(), edge_vertices.size(), sf::PrimitiveType::Lines);
     }
     
-    // Draw nodes with 3D perspective, lighting, and depth-based sizing
+    // Build draw order for nodes: sort by depth (far to near) to emulate z-buffer
+    std::vector<uint32_t> node_indices;
+    node_indices.reserve(graph.node_count);
     for (uint32_t i = 0; i < graph.node_count; i++) {
-        const GraphNode& node = graph.nodes[i];
-        if (!node.visible) continue;
-        
+        if (graph.nodes[i].visible) node_indices.push_back(i);
+    }
+    std::sort(node_indices.begin(), node_indices.end(), [&](uint32_t a, uint32_t b) {
+        const Vector3& pa = graph.nodes[a].position;
+        const Vector3& pb = graph.nodes[b].position;
+        Vector3 ra = pa - camera_position;
+        Vector3 rb = pb - camera_position;
+        float da = ra.x * forward_dir.x + ra.y * forward_dir.y + ra.z * forward_dir.z;
+        float db = rb.x * forward_dir.x + rb.y * forward_dir.y + rb.z * forward_dir.z;
+        return da > db; // draw far first
+    });
+
+    // Draw nodes with 3D perspective, lighting, and depth-based sizing
+    for (uint32_t idx : node_indices) {
+        const GraphNode& node = graph.nodes[idx];
         sf::Vector2f screen_pos = world_to_screen_3d(node.position);
         
         // Calculate depth for perspective scaling
         Vector3 relative_pos = node.position - camera_position;
-        Vector3 forward = (camera_target - camera_position).normalize();
-        float depth = relative_pos.x * forward.x + relative_pos.y * forward.y + relative_pos.z * forward.z;
+        float depth = relative_pos.x * forward_dir.x + relative_pos.y * forward_dir.y + relative_pos.z * forward_dir.z;
         
         float perspective_scale = apply_perspective(depth);
         float visual_radius = node.radius * perspective_scale * 0.5f;
         visual_radius = std::max(2.0f, std::min(visual_radius, 50.0f));
         
-        // Calculate node normal (facing camera)
-        Vector3 normal = (camera_position - node.position).normalize();
+        // Calculate node normal relative to scene center (world-relative lighting)
+        Vector3 normal = (node.position - scene_center).normalize();
         
         // Apply lighting to node color
         sf::Color lit_color = apply_lighting(node.position, normal, 
             sf::Color(node.color.r, node.color.g, node.color.b, node.color.a));
+        
+        // Add contour banding based on world-space height relative to scene center
+        float height = node.position.y - scene_center.y;
+        float band = 0.5f + 0.5f * std::sin(height * lighting.contour_frequency + lighting.contour_offset);
+        float contour_mix = 1.0f - lighting.contour_intensity + lighting.contour_intensity * band;
+        lit_color.r = static_cast<unsigned char>(std::min(255.0f, lit_color.r * contour_mix));
+        lit_color.g = static_cast<unsigned char>(std::min(255.0f, lit_color.g * contour_mix));
+        lit_color.b = static_cast<unsigned char>(std::min(255.0f, lit_color.b * contour_mix));
         
         // Apply fog based on depth
         lit_color = apply_fog(lit_color, depth);
@@ -772,22 +878,14 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         circle.setOutlineColor(sf::Color(255, 255, 255, outline_alpha));
         
         circle.setPosition(sf::Vector2f(screen_pos.x - circle.getRadius(), screen_pos.y - circle.getRadius()));
-        
         window.draw(circle);
     }
     
     // Draw help overlay if enabled
     if (show_help) {
-        Pixels help_overlay = create_help_overlay();
-        sf::Texture help_texture = pixels_to_sfml_texture(help_overlay);
-        sf::Sprite help_sprite(help_texture);
-        
         sf::View original_view = window.getView();
         window.setView(window.getDefaultView());
-        
-        help_sprite.setPosition(sf::Vector2f(10, 10));
-        window.draw(help_sprite);
-        
+        draw_help_overlay_sfml();
         window.setView(original_view);
     }
     
