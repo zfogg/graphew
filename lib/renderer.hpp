@@ -125,6 +125,9 @@ public:
     Pixels create_help_overlay();
     bool show_help;
     
+    // Expose UI drawing for sliders
+    void draw_ui_sliders();
+    
     // Simple UI sliders
     struct UISlider {
         std::string label;
@@ -132,7 +135,7 @@ public:
         float min_value;
         float max_value;
         float last_value;
-        sf::FloatRect rect_px; // in screen pixels
+        struct RectPx { float left, top, width, height; } rect_px; // in screen pixels
         bool dragging;
         UISlider() : target(nullptr), min_value(0), max_value(1), last_value(0), rect_px(), dragging(false) {}
     };
@@ -156,7 +159,6 @@ private:
     void draw_3d_sphere(const Vector3& center, float radius, const sf::Color& color);
     void load_ui_font();
     void draw_help_overlay_sfml();
-    void draw_ui_sliders();
     std::vector<UISlider> ui_sliders;
 };
 

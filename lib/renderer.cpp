@@ -34,6 +34,97 @@ void GraphRenderer::init_window(const std::string& title) {
     view.setCenter(view_center);
     window.setView(view);
     load_ui_font();
+    clear_sliders();
+}
+void GraphRenderer::clear_sliders() {
+    ui_sliders.clear();
+}
+
+void GraphRenderer::add_slider(const std::string& label, float* target, float min_value, float max_value) {
+    UISlider s;
+    s.label = label;
+    s.target = target;
+    s.min_value = min_value;
+    s.max_value = max_value;
+    s.last_value = target ? *target : 0.0f;
+    s.rect_px = {20.f, 100.f + static_cast<float>(ui_sliders.size()) * 40.f, 220.f, 20.f};
+    s.dragging = false;
+    ui_sliders.push_back(s);
+}
+
+void GraphRenderer::handle_ui_event(const sf::Event& ev) {
+    if (ui_sliders.empty()) return;
+    if (!window.hasFocus()) return;
+    
+    if (auto* pressed = ev.getIf<sf::Event::MouseButtonPressed>()) {
+        sf::Vector2i mp = sf::Mouse::getPosition(window);
+        sf::Vector2f mps(static_cast<float>(mp.x), static_cast<float>(mp.y));
+        for (auto& s : ui_sliders) {
+            if (mps.x >= s.rect_px.left && mps.x <= s.rect_px.left + s.rect_px.width &&
+                mps.y >= s.rect_px.top && mps.y <= s.rect_px.top + s.rect_px.height) {
+                s.dragging = true;
+            }
+        }
+    } else if (auto* moved = ev.getIf<sf::Event::MouseMoved>()) {
+        sf::Vector2i mp = sf::Mouse::getPosition(window);
+        sf::Vector2f mps(static_cast<float>(mp.x), static_cast<float>(mp.y));
+        for (auto& s : ui_sliders) {
+            if (s.dragging && s.target) {
+                float t = (mps.x - s.rect_px.left) / s.rect_px.width;
+                t = std::max(0.0f, std::min(1.0f, t));
+                *s.target = s.min_value + t * (s.max_value - s.min_value);
+            }
+        }
+    } else if (auto* released = ev.getIf<sf::Event::MouseButtonReleased>()) {
+        for (auto& s : ui_sliders) s.dragging = false;
+    }
+}
+
+void GraphRenderer::draw_ui_sliders() {
+    if (ui_sliders.empty()) return;
+    sf::View original_view = window.getView();
+    window.setView(window.getDefaultView());
+    
+    // Background panel
+    sf::RectangleShape panel(sf::Vector2f(260.f, 40.f + static_cast<float>(ui_sliders.size()) * 40.f));
+    panel.setPosition(sf::Vector2f(10.f, 100.f));
+    panel.setFillColor(sf::Color(20, 20, 26, 180));
+    panel.setOutlineThickness(1.0f);
+    panel.setOutlineColor(sf::Color(90, 90, 120, 200));
+    window.draw(panel);
+    
+    for (const auto& s : ui_sliders) {
+        // Track
+        sf::RectangleShape track(sf::Vector2f(s.rect_px.width, s.rect_px.height));
+        track.setPosition(sf::Vector2f(s.rect_px.left, s.rect_px.top));
+        track.setFillColor(sf::Color(70, 80, 120, 180));
+        window.draw(track);
+        
+        // Thumb based on value
+        if (s.target) {
+            float t = (*s.target - s.min_value) / (s.max_value - s.min_value);
+            t = std::max(0.0f, std::min(1.0f, t));
+            float x = s.rect_px.left + t * s.rect_px.width;
+            sf::RectangleShape thumb(sf::Vector2f(6.f, s.rect_px.height + 6.f));
+            thumb.setOrigin(sf::Vector2f(3.f, 3.f));
+            thumb.setPosition(sf::Vector2f(x, s.rect_px.top + s.rect_px.height * 0.5f));
+            thumb.setFillColor(sf::Color(230, 230, 255, 220));
+            window.draw(thumb);
+        }
+        
+        // Label
+        if (ui_font_loaded && s.target) {
+            sf::Text txt(ui_font);
+            char buf[128];
+            std::snprintf(buf, sizeof(buf), "%s: %.2f", s.label.c_str(), *s.target);
+            txt.setString(buf);
+            txt.setCharacterSize(14);
+            txt.setFillColor(sf::Color(220, 220, 235, 220));
+            txt.setPosition(sf::Vector2f(s.rect_px.left, s.rect_px.top - 18.f));
+            window.draw(txt);
+        }
+    }
+    window.setView(original_view);
 }
 
 void GraphRenderer::handle_events() {

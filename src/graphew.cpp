@@ -206,6 +206,14 @@ int main(int argc, char* argv[]) {
     layout_params.decay = 0.6f;
     layout_params.iterations = 1000000000; // effectively infinite when used for step batches
     layout_params.dimension = 3.0f;
+
+    // Expose sliders in the UI for interactive tuning
+    renderer->clear_sliders();
+    renderer->add_slider("Repel", &layout_params.repel, 0.0f, 50.0f);
+    renderer->add_slider("Attract", &layout_params.attract, 0.0f, 5.0f);
+    renderer->add_slider("Decay", &layout_params.decay, 0.3f, 0.99f);
+    renderer->add_slider("Centering", &layout_params.centering_strength, 0.0f, 1.0f);
+    renderer->add_slider("Dimension", &layout_params.dimension, 1.0f, 3.0f);
     
     // Continuous force layout (toggle with 'T')
     int layout_iterations_remaining = layout_params.iterations;
@@ -234,13 +242,8 @@ int main(int argc, char* argv[]) {
             }
         }
         
-<<<<<<< HEAD
         // Toggle continuous force layout with 'T'
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::T)) {
-=======
-        // R key restarts force layout simulation (no camera reset)
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R)) {
->>>>>>> 80439256645ee1f68eb87e261d0f9cccb709a1b9
             static sf::Clock key_timer;
             if (key_timer.getElapsedTime().asSeconds() > 0.5f) {
                 force_layout_running = !force_layout_running;
@@ -266,6 +269,9 @@ int main(int argc, char* argv[]) {
             Pixels empty;
             renderer->render_frame(*graph3d, empty);
         }
+        
+        // Draw interactive UI (sliders)
+        renderer->draw_ui_sliders();
     }
     
     cleanup_args(&args);
