@@ -132,10 +132,8 @@ void GraphRenderer::handle_events() {
                     load_camera_preset(9);
                 }
             }
-            // Toggle features
-            else if (keyPress->code == sf::Keyboard::Key::R) {
-                reset_camera();
-            }
+            // R key is handled by main application for graph reset
+            // (removed camera reset from here)
             else if (keyPress->code == sf::Keyboard::Key::Space) {
                 auto_rotate = !auto_rotate;
                 std::cout << "Auto-rotation " << (auto_rotate ? "enabled" : "disabled") << std::endl;
@@ -236,8 +234,8 @@ void GraphRenderer::draw_grid() {
     const int grid_lines = 20;     // Fewer lines to reduce clutter
     const sf::Color grid_color(50, 50, 50, 80);
     
-    // Center grid on camera target (where we're looking)
-    Vector3 grid_center = camera_target;
+    // Center grid on the scene center (graph data center)
+    Vector3 grid_center = scene_center;
     
     // Create vertex arrays for grid lines
     std::vector<sf::Vertex> vertices;
