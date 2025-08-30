@@ -6,8 +6,13 @@
 #include <array>
 #include <vector>
 #include <string>
+#include <map>
 #include "graph.hpp"
 #include "swaptube_pixels.hpp"
+
+#ifdef __APPLE__
+#include "macos_gestures.hpp"
+#endif
 
 #define DEFAULT_SCREEN_WIDTH 1920
 #define DEFAULT_SCREEN_HEIGHT 1080
@@ -100,6 +105,19 @@ public:
     sf::Font ui_font;
     bool ui_font_loaded;
     float render_dimension = 3.0f; // 1..3 for render-space scaling
+    
+    // Trackpad gesture support
+    std::map<unsigned int, sf::Vector2f> touch_points; // finger_id -> position
+    bool is_trackpad_panning;
+    sf::Vector2f last_pan_position;
+    float initial_pinch_distance;
+    float initial_camera_distance;
+    bool is_pinching;
+    
+    // Momentum-based trackpad detection
+    sf::Clock last_scroll_time;
+    float scroll_momentum;
+    bool is_pinch_zooming; // Prevent conflicting gestures
 
     GraphRenderer();
     ~GraphRenderer();
@@ -158,6 +176,12 @@ private:
     float calculate_depth_shade(float depth);
     void draw_3d_line(const Vector3& start, const Vector3& end, const sf::Color& color, float thickness = 1.0f);
     void draw_3d_sphere(const Vector3& center, float radius, const sf::Color& color);
+    void draw_textured_node(sf::RenderWindow& window, const sf::Vector2f& screen_pos, float radius, 
+                           const sf::Color& base_color, float depth, const Vector3& world_pos);
+    void handle_trackpad_gesture_begin(unsigned int finger, const sf::Vector2f& position);
+    void handle_trackpad_gesture_move(unsigned int finger, const sf::Vector2f& position);
+    void handle_trackpad_gesture_end(unsigned int finger);
+    void handle_pinch_gesture(float magnification, float cursor_x, float cursor_y);
     void load_ui_font();
     void draw_help_overlay_sfml();
     std::vector<UISlider> ui_sliders;

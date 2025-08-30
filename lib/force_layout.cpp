@@ -218,12 +218,12 @@ void ForceLayoutEngine::integrate_physics(std::vector<NodePhysics>& physics_node
         node.velocity.y *= wy;
         node.velocity.z *= wz;
         if (wy > 0.05f && std::abs(node.position.y) < 1e-3f && std::abs(node.velocity.y) < 1e-4f) {
-            static thread_local std::mt19937 rng(std::random_device{}());
+            static std::mt19937 rng(std::random_device{}());
             std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
             node.velocity.y += dist(rng) * 0.02f * wy;
         }
         if (wz > 0.05f && std::abs(node.position.z) < 1e-3f && std::abs(node.velocity.z) < 1e-4f) {
-            static thread_local std::mt19937 rng2(std::random_device{}());
+            static std::mt19937 rng2(std::random_device{}());
             std::uniform_real_distribution<float> dist2(-1.0f, 1.0f);
             node.velocity.z += dist2(rng2) * 0.02f * wz;
         }

@@ -410,7 +410,7 @@ void AgentGraphBuilder::build_inventory_dimensional_graph(const ReplayData& repl
                 }
             }
             float total_reward = agent.get_total_reward_at_time(timestep);
-            int reward_bucket = static_cast<int>(total_reward * 10); // Scale up for better bucketing
+            int reward_bucket = static_cast<int>(total_reward * REWARD_BUCKET_SCALE); // Scale up for better bucketing
             state_sig += "R" + std::to_string(reward_bucket);
             
             // Add node if this state is new
@@ -437,7 +437,7 @@ void AgentGraphBuilder::build_inventory_dimensional_graph(const ReplayData& repl
                               << ") from inventory: ore=" << ore_qty << " battery=" << battery_qty << " heart=" << heart_qty << std::endl;
                 }
                 
-                Color color = reward_to_color(total_reward, 20.0f); // Use actual reward value, not bucket
+                Color color = reward_to_color(total_reward, MAX_REWARD_FOR_COLOR); // Use actual reward value, not bucket
                 float node_radius = 0.3f + static_cast<float>(reward_bucket) * 0.1f;
                 
                 // DEBUG: Print color assignment for first few states
@@ -494,7 +494,7 @@ void AgentGraphBuilder::build_inventory_dimensional_graph(const ReplayData& repl
                         sig += item + std::to_string(qty) + "_";
                     }
                 }
-                int reward_bucket = static_cast<int>(agent.get_total_reward_at_time(timestep));
+                int reward_bucket = static_cast<int>(agent.get_total_reward_at_time(timestep) * REWARD_BUCKET_SCALE);
                 sig += "R" + std::to_string(reward_bucket);
                 return sig;
             };
@@ -582,7 +582,7 @@ void AgentGraphBuilder::build_temporal_graph(const ReplayData& replay, Graph3D& 
             Vector3 position(grid_pos.x * 0.5f, grid_pos.y * 0.5f, agent.agent_id * 2.0f);
             
             float total_reward = agent.get_total_reward_at_time(timestep);
-            Color color = reward_to_color(total_reward, 10.0f);
+            Color color = reward_to_color(total_reward, TEMPORAL_MAX_REWARD);
             
             std::string label = "A" + std::to_string(agent.agent_id) + "_T" + std::to_string(timestep);
             
