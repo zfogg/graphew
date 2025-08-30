@@ -543,6 +543,7 @@ void GraphRenderer::handle_camera_movement(float delta_time) {
 }
 
 void GraphRenderer::update_camera_position() {
+    
     // Calculate 3D camera position based on angles, ensuring proper centering
     camera_position.x = camera_target.x + camera_distance * std::cos(camera_angle_v) * std::cos(camera_angle_h);
     camera_position.y = camera_target.y + camera_distance * std::sin(camera_angle_v);
@@ -555,23 +556,31 @@ sf::Vector2f GraphRenderer::world_to_screen_3d(const Vector3& world_pos) {
     Vector3 cp = scale_for_render(camera_position);
     Vector3 relative_pos = wp - cp;
     
-    // Create view matrix (simplified)
-    Vector3 forward = (scale_for_render(camera_target) - cp).normalize();
-    Vector3 right = Vector3(forward.z, 0, -forward.x).normalize(); // Cross with up(0,1,0)
-    Vector3 up = Vector3(-forward.x * forward.y, forward.x * forward.x + forward.z * forward.z, -forward.z * forward.y).normalize();
+    // Create proper view matrix
+    Vector3 forward = (camera_target - camera_position).normalize();
+    Vector3 right = Vector3(forward.z, 0, -forward.x).normalize();
+    Vector3 up = Vector3(
+        right.y * forward.z - right.z * forward.y,
+        right.z * forward.x - right.x * forward.z, 
+        right.x * forward.y - right.y * forward.x
+    ).normalize();
     
     // Transform to camera space
     float cam_x = relative_pos.x * right.x + relative_pos.y * right.y + relative_pos.z * right.z;
     float cam_y = relative_pos.x * up.x + relative_pos.y * up.y + relative_pos.z * up.z;
     float cam_z = relative_pos.x * forward.x + relative_pos.y * forward.y + relative_pos.z * forward.z;
     
-    // Perspective projection - ensure proper centering
-    float perspective_scale = apply_perspective(cam_z);
+    // Perspective projection with proper math
+    if (cam_z <= 0.1f) cam_z = 0.1f; // Clamp to prevent division by zero
     
-    // Get current window size for proper centering
+    float fov_rad = field_of_view * M_PI / 180.0f;
+    float f = 1.0f / std::tan(fov_rad / 2.0f);
+    
     sf::Vector2u window_size = window.getSize();
-    float screen_x = cam_x * perspective_scale + window_size.x / 2.0f;
-    float screen_y = -cam_y * perspective_scale + window_size.y / 2.0f; // Flip Y
+    float aspect_ratio = static_cast<float>(window_size.x) / static_cast<float>(window_size.y);
+    
+    float screen_x = (cam_x * f / (aspect_ratio * cam_z)) * (window_size.x / 2.0f) + (window_size.x / 2.0f);
+    float screen_y = (cam_y * f / cam_z) * (window_size.y / 2.0f) + (window_size.y / 2.0f);
     
     return sf::Vector2f(screen_x, screen_y);
 }
@@ -896,32 +905,16 @@ void GraphRenderer::calculate_graph_bounds(const Graph3D& graph, Vector3& min_bo
         max_bounds.z = std::max(max_bounds.z, pos.z);
     }
     
-    // Set camera to view entire graph
-    Vector3 center = (min_bounds + max_bounds) * 0.5f;
-    Vector3 size = max_bounds - min_bounds;
-    float max_dimension = std::max({size.x, size.y, size.z});
+    // FOUND THE PROBLEM! This method is OVERRIDING the camera target!
+    // Comment out the camera setup that's resetting everything
     
-    // This method can't modify the const graph - centering should be done before calling this
+    std::cout << "calculate_graph_bounds() called - NOT setting camera (this was the problem!)" << std::endl;
     
-    // Now camera can look at origin and graph will be centered
-    camera_target = Vector3(0, 0, 0);
-    scene_center = Vector3(0, 0, 0); // centered at origin now
-    
-    // Set appropriate camera distance and angle for good initial view
-    camera_distance = 30.0f; // Fixed distance that works well
-    camera_angle_v = 0.3f; // Good downward angle
-    camera_angle_h = 0.785f; // 45-degree angle
-    
-    std::cout << "Camera positioned at distance " << camera_distance << " looking at (" 
-              << center.x << "," << center.y << "," << center.z << ")" << std::endl;
-    
-    update_camera_position();
+    // Don't set camera here - it should be set in main application only
 }
 
 void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
     window.clear(sf::Color::Black);
-    
-    // Skip auto-adjustment - centering should be done at startup
     
     draw_grid();
     draw_axes();

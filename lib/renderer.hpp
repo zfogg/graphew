@@ -111,6 +111,7 @@ public:
     void cleanup();
     void reset_camera();
     void calculate_graph_bounds(const Graph3D& graph, Vector3& min_bounds, Vector3& max_bounds);
+    void update_camera_position(); // Make this public
     
     // Camera preset management
     void save_camera_preset(int slot);
@@ -150,7 +151,6 @@ private:
     void handle_camera_movement(float delta_time);
     void draw_grid();
     void draw_axes();
-    void update_camera_position();
     sf::Vector2f world_to_screen_3d(const Vector3& world_pos);
     float apply_perspective(float z_depth);
     sf::Color apply_lighting(const Vector3& position, const Vector3& normal, const sf::Color& base_color);

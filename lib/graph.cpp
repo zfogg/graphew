@@ -346,4 +346,11 @@ void Graph3D::center_graph() {
     for (uint32_t i = 0; i < node_count; i++) {
         nodes[i].position = nodes[i].position - center_of_mass;
     }
+    
+    // Debug: Print first few node positions to verify centering
+    std::cout << "After centering - first 3 node positions:" << std::endl;
+    for (uint32_t i = 0; i < std::min(3u, node_count); i++) {
+        std::cout << "  Node " << i << ": (" << nodes[i].position.x << "," 
+                  << nodes[i].position.y << "," << nodes[i].position.z << ")" << std::endl;
+    }
 }

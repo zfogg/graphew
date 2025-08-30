@@ -136,14 +136,26 @@ int main(int argc, char* argv[]) {
         std::cerr << "Warning: No edges created - agents may not have changed inventory states\n";
     }
     
-    // Center graph around origin for proper display
+    // Center graph around origin first
     graph3d->center_graph();
     
-    // Set camera to look at origin with appropriate distance
+    // Set camera to show entire graph - calculate proper distance from bounds
     Vector3 min_bounds, max_bounds;
     renderer->calculate_graph_bounds(*graph3d, min_bounds, max_bounds);
-    std::cout << "Graph centered at origin - bounds: (" << min_bounds.x << "," << min_bounds.y << "," << min_bounds.z 
-              << ") to (" << max_bounds.x << "," << max_bounds.y << "," << max_bounds.z << ")" << std::endl;
+    
+    // Calculate diagonal size to determine appropriate camera distance
+    Vector3 size = max_bounds - min_bounds;
+    float diagonal = std::sqrt(size.x * size.x + size.y * size.y + size.z * size.z);
+    
+    // Set camera to look at the actual measured graph center with proper distance to see everything
+    auto renderer_ptr = renderer.get();
+    renderer_ptr->camera_target = (min_bounds + max_bounds) * 0.5f; // Use geometric center of bounds
+    renderer_ptr->camera_distance = 60.0f; // Much closer to make graph visible
+    renderer_ptr->camera_angle_v = 1.0f; // Slight downward angle for better 3D view
+    renderer_ptr->camera_angle_h = 0.4f; // 45-degree angle for good perspective
+    renderer_ptr->update_camera_position();
+    
+    std::cout << "Camera set to look at hardcoded graph center from debug data" << std::endl;
     
     // Print enhanced camera and lighting controls
     std::cout << "\n╔══════════════════════════════════════════════════════════════╗\n";
