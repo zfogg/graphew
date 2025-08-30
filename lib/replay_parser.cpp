@@ -423,18 +423,27 @@ void AgentGraphBuilder::build_inventory_dimensional_graph(const ReplayData& repl
                     else if (item == "heart") heart_qty = agent.get_inventory_at_time(item, timestep);
                 }
                 
-                // Initialize in organized grid pattern centered around origin
+                // Initialize in organized grid pattern with reward/temporal Z-dimension
+                // Calculate Z based on reward progression over time
+                float max_reward_in_data = 20.0f; // Reasonable max for scaling
+                float reward_z = (total_reward / max_reward_in_data) * 10.0f; // Scale to reasonable Z range
+                
+                // Add temporal component - later timesteps get pushed forward
+                float max_timestep = 1000.0f; // Reasonable max timestep
+                float temporal_z = (static_cast<float>(timestep) / max_timestep) * 5.0f;
+                
                 Vector3 position(
-                    (ore_qty - 5.0f) * 2.0f,        // Center around 5 ore (typical mid-range)
-                    (battery_qty - 1.0f) * 3.0f,    // Center around 1 battery
-                    (heart_qty - 5.0f) * 1.5f       // Center around 5 hearts
+                    (ore_qty - 5.0f) * 2.0f,        // X: Center around 5 ore (typical mid-range)
+                    (battery_qty - 1.0f) * 3.0f,    // Y: Center around 1 battery  
+                    reward_z + temporal_z - 7.5f    // Z: Reward + time progression, centered around -7.5
                 );
                 
                 // DEBUG: Print first few positions to compare formats
                 if (state_to_node_id.size() < 5) {
                     std::cout << "Initial node " << state_to_node_id.size() << " position: (" 
                               << position.x << "," << position.y << "," << position.z 
-                              << ") from inventory: ore=" << ore_qty << " battery=" << battery_qty << " heart=" << heart_qty << std::endl;
+                              << ") from inventory: ore=" << ore_qty << " battery=" << battery_qty << " heart=" << heart_qty
+                              << " reward=" << total_reward << " timestep=" << timestep << std::endl;
                 }
                 
                 Color color = reward_to_color(total_reward, MAX_REWARD_FOR_COLOR); // Use actual reward value, not bucket
