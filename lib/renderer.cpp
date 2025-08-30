@@ -42,14 +42,14 @@ void GraphRenderer::init_window(const std::string& title) {
     window.setView(view);
     load_ui_font();
     clear_sliders();
-    
+
 #ifdef __APPLE__
     // Initialize macOS gesture monitoring
     MacOSGestureMonitor::initialize();
     MacOSGestureMonitor::set_magnification_callback([this](float magnification, float x, float y) {
         this->handle_pinch_gesture(magnification, x, y);
     });
-    
+
     // Integrate gesture support with SFML window
     sf::WindowHandle window_handle = window.getNativeHandle();
     MacOSGestureMonitor::integrate_with_sfml_window(window_handle);
@@ -199,78 +199,29 @@ void GraphRenderer::handle_events() {
             sf::Vector2i mp = sf::Mouse::getPosition(window);
             sf::Vector2f mps(static_cast<float>(mp.x), static_cast<float>(mp.y));
             if (!is_mouse_over_ui(mps)) {
-                float delta_x = mouseWheel->delta;  // Horizontal scroll (trackpad pan left/right)
-                float delta_y = mouseWheel->delta;  // Vertical scroll (trackpad pan up/down or zoom)
-                
-                // Check if this is a pinch gesture first (takes priority)
-                bool is_large_delta = abs(mouseWheel->delta) > 1.0f;
-                
-                // On macOS, check if this is horizontal vs vertical scroll
-                if (mouseWheel->wheel == sf::Mouse::Wheel::Horizontal && !is_large_delta) {
-                    // Trackpad two-finger horizontal pan (only if not pinching)
-                    if (!is_pinch_zooming) {
-                        float pan_sensitivity = 0.05f;
-                        camera_target.x += delta_x * pan_sensitivity * camera_distance;
-                        std::cout << "Trackpad horizontal pan: " << delta_x << std::endl;
-                    }
+                // Simple approach: ALL scroll events = direct pan (no physics complexity)
+                if (mouseWheel->wheel == sf::Mouse::Wheel::Horizontal) {
+                    // Horizontal trackpad pan - direct, simple, no physics
+                    float pan_amount = mouseWheel->delta * 0.1f;
+                    camera_target.x += pan_amount;
                 }
                 else if (mouseWheel->wheel == sf::Mouse::Wheel::Vertical) {
-                    // Check modifier keys for special scroll functions
-                    bool shift_pressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
-                    bool ctrl_pressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl);
-                    
-                    // Shift+scroll adjusts FOV
+                    // Check modifier keys
+                    bool shift_pressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
+                    bool ctrl_pressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl);
+
                     if (shift_pressed) {
-                        field_of_view = std::max(20.0f, std::min(120.0f, field_of_view - delta_y * 5.0f));
-                        std::cout << "FOV: " << field_of_view << "°" << std::endl;
+                        // FOV adjustment
+                        field_of_view = std::max(20.0f, std::min(120.0f, field_of_view - mouseWheel->delta * 5.0f));
                     }
-                    // Ctrl+scroll adjusts camera speed
                     else if (ctrl_pressed) {
-                        camera_move_speed = std::max(1.0f, std::min(50.0f, camera_move_speed + delta_y * 2.0f));
-                        std::cout << "Camera speed: " << camera_move_speed << std::endl;
+                        // Camera speed adjustment
+                        camera_move_speed = std::max(1.0f, std::min(50.0f, camera_move_speed + mouseWheel->delta * 2.0f));
                     }
-                    // PINCH ZOOM: Large deltas = pinch gesture (PRIORITY)
-                    else if (is_large_delta) {
-                        is_pinch_zooming = true; // Block other gestures
-                        
-                        sf::Vector2i mouse_screen = sf::Mouse::getPosition(window);
-                        sf::Vector2f mouse_pos(static_cast<float>(mouse_screen.x), static_cast<float>(mouse_screen.y));
-                        
-                        // Convert to window coordinates
-                        sf::Vector2u window_size = window.getSize();
-                        sf::Vector2f window_center(window_size.x / 2.0f, window_size.y / 2.0f);
-                        
-                        float old_distance = camera_distance;
-                        float zoom_factor = 1.0f + (delta_y * 0.1f); // Scale down the large deltas
-                        float new_distance = std::max(1.0f, std::min(200.0f, camera_distance / zoom_factor));
-                        
-                        if (old_distance != new_distance) {
-                            // Zoom to cursor
-                            sf::Vector2f screen_offset = mouse_pos - window_center;
-                            float world_scale = old_distance * 0.05f;
-                            sf::Vector2f world_offset = screen_offset * world_scale;
-                            
-                            float zoom_ratio = new_distance / old_distance;
-                            sf::Vector2f new_world_offset = world_offset * zoom_ratio;
-                            sf::Vector2f world_delta = world_offset - new_world_offset;
-                            
-                            camera_target.x += world_delta.x;
-                            camera_target.y -= world_delta.y;
-                            camera_distance = new_distance;
-                            
-                            std::cout << "PINCH ZOOM detected: delta=" << delta_y << " at (" << mouse_pos.x << "," << mouse_pos.y << ")" << std::endl;
-                        }
-                        
-                        // Reset pinch flag after a short delay
-                        static sf::Clock pinch_timeout;
-                        pinch_timeout.restart();
-                        // The flag will be reset in the camera update loop
-                    }
-                    // TRACKPAD PAN: Small deltas = scroll/pan (only if not pinching)
-                    else if (!is_pinch_zooming) {
-                        float pan_sensitivity = 0.1f;
-                        camera_target.y -= delta_y * pan_sensitivity * camera_distance;
-                        std::cout << "Trackpad vertical pan: " << delta_y << std::endl;
+                    else {
+                        // Vertical trackpad pan - direct, simple, no physics
+                        float pan_amount = -mouseWheel->delta * 0.1f; // Negative for natural scroll
+                        camera_target.y += pan_amount;
                     }
                 }
             }
@@ -562,7 +513,7 @@ void GraphRenderer::handle_camera_movement(float delta_time) {
         is_pinch_zooming = false;
         pinch_timeout.restart();
     }
-    
+
     // Camera rotation with arrow keys or mouse right-drag
     if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Right)) {
         sf::Vector2i mouse_pos = sf::Mouse::getPosition(window);
@@ -1199,14 +1150,14 @@ void update_sfml_texture_from_pixels(sf::Texture& texture, const Pixels& pixels)
     texture.update(sfml_pixels.data());
 }
 
-void GraphRenderer::draw_textured_node(sf::RenderWindow& window, const sf::Vector2f& screen_pos, float radius, 
+void GraphRenderer::draw_textured_node(sf::RenderWindow& window, const sf::Vector2f& screen_pos, float radius,
                                        const sf::Color& base_color, float depth, const Vector3& /* world_pos */) {
     // Create a proper sphere texture with radial gradient lighting
     // Use instance variable instead of static to avoid exit-time cleanup issues
     static std::map<int, sf::Texture>* sphere_textures = new std::map<int, sf::Texture>(); // Leak intentionally to avoid exit crash
     int texture_size = static_cast<int>(radius * 4); // Higher resolution for larger nodes
     texture_size = std::max(16, std::min(texture_size, 128)); // Clamp size
-    
+
     // Check if we need to create/recreate the texture
     if (sphere_textures->find(texture_size) == sphere_textures->end()) {
         // Create sphere texture with proper lighting
@@ -1218,65 +1169,65 @@ void GraphRenderer::draw_textured_node(sf::RenderWindow& window, const sf::Vecto
                 sphere_image.setPixel(sf::Vector2u(x, y), sf::Color::Transparent);
             }
         }
-        
+
         float center = texture_size / 2.0f;
         float max_radius = center;
-        
+
         // Light direction (normalized) - coming from top-left-front
         Vector3 light_dir = lighting.directional_light_dir;
         light_dir = light_dir.normalize();
-        
+
         for (int y = 0; y < texture_size; y++) {
             for (int x = 0; x < texture_size; x++) {
                 float dx = x - center;
                 float dy = y - center;
                 float distance_from_center = sqrt(dx*dx + dy*dy);
-                
+
                 if (distance_from_center <= max_radius) {
                     // Calculate sphere surface normal at this point
                     float nx = dx / max_radius; // Normalized X
                     float ny = dy / max_radius; // Normalized Y
                     float nz_sq = 1.0f - (nx*nx + ny*ny); // Z component squared
-                    
+
                     if (nz_sq > 0) {
                         float nz = sqrt(nz_sq); // Z component (always positive, facing towards viewer)
                         Vector3 normal(nx, ny, nz);
-                        
+
                         // Calculate lighting
                         float diffuse = std::max(0.0f, normal.x * light_dir.x + normal.y * light_dir.y + normal.z * light_dir.z);
-                        
+
                         // Specular highlight (Blinn-Phong)
                         Vector3 view_dir(0, 0, 1); // Looking straight down Z axis
                         Vector3 half_dir = light_dir + view_dir;
                         half_dir = half_dir.normalize();
                         float specular = pow(std::max(0.0f, normal.x * half_dir.x + normal.y * half_dir.y + normal.z * half_dir.z), 64.0f);
-                        
+
                         // Combine lighting
                         float ambient = lighting.ambient_intensity;
                         float total_light = ambient + lighting.directional_intensity * diffuse + 0.4f * specular;
                         total_light = std::min(1.0f, total_light);
-                        
+
                         // Edge darkening for more depth
                         float edge_factor = 1.0f - (distance_from_center / max_radius);
                         edge_factor = 0.3f + 0.7f * edge_factor; // Don't go completely black at edges
                         total_light *= edge_factor;
-                        
+
                         // Set pixel color (white texture that will be tinted by base_color)
                         uint8_t intensity = static_cast<uint8_t>(255 * total_light);
                         uint8_t alpha = 255;
-                        
+
                         // Soft edges with antialiasing
                         if (distance_from_center > max_radius - 1.0f) {
                             float edge_alpha = max_radius - distance_from_center;
                             alpha = static_cast<uint8_t>(255 * edge_alpha);
                         }
-                        
+
                         sphere_image.setPixel(sf::Vector2u(x, y), sf::Color(intensity, intensity, intensity, alpha));
                     }
                 }
             }
         }
-        
+
         // Create texture from image
         sf::Texture& texture = (*sphere_textures)[texture_size];
         if (!texture.loadFromImage(sphere_image)) {
@@ -1284,20 +1235,20 @@ void GraphRenderer::draw_textured_node(sf::RenderWindow& window, const sf::Vecto
         }
         texture.setSmooth(true); // Enable antialiasing
     }
-    
+
     // Draw the textured sphere
     sf::Sprite sphere_sprite((*sphere_textures)[texture_size]);
     sphere_sprite.setColor(base_color); // Tint the white texture with the base color
-    
+
     // Scale sprite to match desired radius
     float scale_factor = (radius * 2) / texture_size;
     sphere_sprite.setScale(sf::Vector2f(scale_factor, scale_factor));
-    
+
     // Position sprite centered on screen_pos
     sphere_sprite.setPosition(sf::Vector2f(screen_pos.x - radius, screen_pos.y - radius));
-    
+
     window.draw(sphere_sprite);
-    
+
     // Add subtle outline for depth (optional, makes nodes pop more)
     sf::CircleShape outline(radius);
     outline.setFillColor(sf::Color::Transparent);
@@ -1311,7 +1262,7 @@ void GraphRenderer::draw_textured_node(sf::RenderWindow& window, const sf::Vecto
 void GraphRenderer::handle_trackpad_gesture_begin(unsigned int finger, const sf::Vector2f& position) {
     // Store the touch point
     touch_points[finger] = position;
-    
+
     if (touch_points.size() == 1) {
         // Start single finger interaction (potential panning)
         is_trackpad_panning = false; // Wait for movement to confirm panning
@@ -1323,14 +1274,14 @@ void GraphRenderer::handle_trackpad_gesture_begin(unsigned int finger, const sf:
         sf::Vector2f pos1 = it->second;
         ++it;
         sf::Vector2f pos2 = it->second;
-        
+
         // Calculate initial distance between fingers
         sf::Vector2f delta = pos1 - pos2;
         initial_pinch_distance = sqrt(delta.x * delta.x + delta.y * delta.y);
         initial_camera_distance = camera_distance;
         is_pinching = true;
         is_trackpad_panning = false; // Switch from panning to pinching
-        
+
         std::cout << "Pinch gesture started, initial distance: " << initial_pinch_distance << std::endl;
     }
 }
@@ -1339,28 +1290,28 @@ void GraphRenderer::handle_trackpad_gesture_move(unsigned int finger, const sf::
     if (touch_points.find(finger) == touch_points.end()) {
         return; // Unknown finger
     }
-    
+
     touch_points[finger] = position;
-    
+
     if (touch_points.size() == 1) {
         // Single finger panning (two-finger pan gesture)
         if (!is_pinching) {
             sf::Vector2f delta = position - last_pan_position;
-            
+
             // Only start panning if movement is significant enough
             if (!is_trackpad_panning && (abs(delta.x) > 5 || abs(delta.y) > 5)) {
                 is_trackpad_panning = true;
                 std::cout << "Pan gesture started" << std::endl;
             }
-            
+
             if (is_trackpad_panning) {
                 // Convert screen movement to camera movement
                 float pan_sensitivity = 0.01f;
-                
+
                 // Apply panning to camera target
                 camera_target.x -= delta.x * pan_sensitivity * camera_distance;
                 camera_target.y += delta.y * pan_sensitivity * camera_distance; // Invert Y for natural feel
-                
+
                 last_pan_position = position;
             }
         }
@@ -1371,16 +1322,16 @@ void GraphRenderer::handle_trackpad_gesture_move(unsigned int finger, const sf::
         sf::Vector2f pos1 = it->second;
         ++it;
         sf::Vector2f pos2 = it->second;
-        
+
         // Calculate current distance between fingers
         sf::Vector2f delta = pos1 - pos2;
         float current_distance = sqrt(delta.x * delta.x + delta.y * delta.y);
-        
+
         if (initial_pinch_distance > 0) {
             // Calculate zoom factor
             float zoom_factor = current_distance / initial_pinch_distance;
             float new_distance = initial_camera_distance / zoom_factor;
-            
+
             // Apply zoom limits
             camera_distance = std::max(1.0f, std::min(200.0f, new_distance));
         }
@@ -1390,7 +1341,7 @@ void GraphRenderer::handle_trackpad_gesture_move(unsigned int finger, const sf::
 void GraphRenderer::handle_trackpad_gesture_end(unsigned int finger) {
     // Remove the touch point
     touch_points.erase(finger);
-    
+
     if (touch_points.empty()) {
         // All fingers lifted - end all gestures
         is_trackpad_panning = false;
@@ -1404,7 +1355,7 @@ void GraphRenderer::handle_trackpad_gesture_end(unsigned int finger) {
         is_pinching = false;
         initial_pinch_distance = 0;
         initial_camera_distance = 0;
-        
+
         // Update pan position to remaining finger
         auto remaining_touch = touch_points.begin();
         last_pan_position = remaining_touch->second;
@@ -1418,63 +1369,63 @@ void GraphRenderer::handle_pinch_gesture(float magnification, float cursor_x, fl
     float window_cursor_x = cursor_x;
     float window_cursor_y = cursor_y;
     sf::Vector2u window_size = window.getSize();
-    
+
     // Only handle if cursor is within our window
-    if (window_cursor_x >= 0 && window_cursor_x < window_size.x && 
+    if (window_cursor_x >= 0 && window_cursor_x < window_size.x &&
         window_cursor_y >= 0 && window_cursor_y < window_size.y) {
-        
+
         // Apply magnification to camera distance
         // Magnification is typically small values like 0.1, -0.05, etc.
         float zoom_factor = 1.0f + magnification;
-        
+
         float old_distance = camera_distance;
         float new_distance = std::max(1.0f, std::min(200.0f, camera_distance / zoom_factor));
-        
+
         if (old_distance != new_distance) {
             // Use the EXACT inverse of world_to_screen_3d for proper zoom-to-cursor
             sf::Vector2u window_size = window.getSize();
-            
+
             // Calculate screen offset from center (include view_center offset)
             float screen_x_offset = window_cursor_x - (window_size.x / 2.0f) + view_center.x;
             float screen_y_offset = (window_size.y / 2.0f) - window_cursor_y + view_center.y;
-            
+
             // Inverse the zoom scale transformation
             float old_base_scale = 15.0f;
             float old_zoom_scale = old_base_scale * (50.0f / old_distance);
-            
+
             // Convert screen offset to world offset (before camera rotations)
             float final_x = screen_x_offset / old_zoom_scale;
             float final_y = screen_y_offset / old_zoom_scale;
-            
+
             // Inverse camera rotations to get original world offset
             float cos_h = std::cos(camera_angle_h);
             float sin_h = std::sin(camera_angle_h);
             float cos_v = std::cos(camera_angle_v);
             float sin_v = std::sin(camera_angle_v);
-            
+
             // Inverse vertical rotation
             float offset_y = final_y / cos_v; // Simplified - assumes temp_z component is small
-            
-            // Inverse horizontal rotation  
+
+            // Inverse horizontal rotation
             float offset_x = final_x * cos_h;
             float offset_z = final_x * sin_h;
-            
+
             // World point under cursor
             Vector3 world_point_under_cursor = camera_target + Vector3(offset_x, offset_y, offset_z);
-            
+
             // Apply zoom
             camera_distance = new_distance;
-            
+
             // Calculate how much the world point moves on screen with new zoom
             float new_zoom_scale = old_base_scale * (50.0f / new_distance);
             float scale_ratio = old_zoom_scale / new_zoom_scale;
-            
+
             // Adjust camera target to keep the world point at the same screen position
             Vector3 world_offset = world_point_under_cursor - camera_target;
             Vector3 adjusted_offset = world_offset * (1.0f - scale_ratio);
             camera_target = camera_target + adjusted_offset;
-            
-            std::cout << "Native pinch zoom: magnification=" << magnification 
+
+            std::cout << "Native pinch zoom: magnification=" << magnification
                       << " zoom_factor=" << zoom_factor << " at window (" << window_cursor_x << "," << window_cursor_y << ")" << std::endl;
         }
     }

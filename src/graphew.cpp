@@ -116,24 +116,6 @@ int main(int argc, char* argv[]) {
         std::vector<std::string> inventory_dims;
         std::vector<std::string> active_items;
 
-        // Check which items have actual timestep data (not just non-zero values)
-        for (const std::string& item : replay.inventory_items) {
-            bool has_timestep_data = false;
-            for (const auto& agent : replay.agents) {
-                auto it = agent.inventory_over_time.find(item);
-                if (it != agent.inventory_over_time.end() && it->second.size() > 0) {
-                    has_timestep_data = true;
-                    break;
-                }
-            }
-            if (has_timestep_data) {
-                active_items.push_back(item);
-                std::cout << "Active item found: " << item << std::endl;
-            } else {
-                std::cout << "Skipping item with no data: " << item << std::endl;
-            }
-        }
-
         // Use active items or fallback to first available items
         if (active_items.size() >= 3) {
             inventory_dims = {active_items[0], active_items[1], active_items[2]};
@@ -320,20 +302,12 @@ int main(int argc, char* argv[]) {
         bool r_key_is_pressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R);
         // Only trigger on key press (not while held down)
         if (r_key_is_pressed && !r_key_was_pressed) {
-            std::cout << "Resetting graph to initial layout..." << std::endl;
-
             // Restore initial positions before any force layout
             std::cout << "Restoring " << initial_positions.size() << " positions..." << std::endl;
             for (uint32_t i = 0; i < graph3d->node_count && i < initial_positions.size(); i++) {
-                Vector3 old_pos = graph3d->nodes[i].position;
                 graph3d->nodes[i].position = initial_positions[i];
                 graph3d->nodes[i].velocity = Vector3(0, 0, 0); // Reset velocities
                 graph3d->nodes[i].force = Vector3(0, 0, 0);    // Reset forces
-
-                if (i < 3) {
-                    std::cout << "  Node " << i << ": (" << old_pos.x << "," << old_pos.y << "," << old_pos.z
-                                << ") -> (" << initial_positions[i].x << "," << initial_positions[i].y << "," << initial_positions[i].z << ")" << std::endl;
-                }
             }
 
             // Pause force layout briefly so you can see the reset visually
@@ -345,8 +319,6 @@ int main(int argc, char* argv[]) {
             force_ramp_active = true;
             layout_params.force_multiplier = 0.0f; // Start from zero force
             force_layout_running = true; // Enable force layout with zero force initially
-
-            std::cout << "Force layout ramping up slowly from initial state" << std::endl;
 
         }
 

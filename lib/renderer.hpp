@@ -118,6 +118,10 @@ public:
     sf::Clock last_scroll_time;
     float scroll_momentum;
     bool is_pinch_zooming; // Prevent conflicting gestures
+    
+    // Smooth panning system
+    Vector3 target_camera_target; // Where camera should smoothly move to
+    Vector3 pan_velocity; // Current panning velocity for smooth interpolation
 
     GraphRenderer();
     ~GraphRenderer();
