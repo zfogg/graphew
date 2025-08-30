@@ -543,6 +543,7 @@ void GraphRenderer::handle_camera_movement(float delta_time) {
 }
 
 void GraphRenderer::update_camera_position() {
+    std::cout << "update_camera_position() - target: (" << camera_target.x << "," << camera_target.y << "," << camera_target.z << ")" << std::endl;
     
     // Calculate 3D camera position based on angles, ensuring proper centering
     camera_position.x = camera_target.x + camera_distance * std::cos(camera_angle_v) * std::cos(camera_angle_h);
@@ -551,36 +552,33 @@ void GraphRenderer::update_camera_position() {
 }
 
 sf::Vector2f GraphRenderer::world_to_screen_3d(const Vector3& world_pos) {
-    // Transform world position relative to camera
-    Vector3 wp = scale_for_render(world_pos);
-    Vector3 cp = scale_for_render(camera_position);
-    Vector3 relative_pos = wp - cp;
-    
-    // Create proper view matrix
-    Vector3 forward = (camera_target - camera_position).normalize();
-    Vector3 right = Vector3(forward.z, 0, -forward.x).normalize();
-    Vector3 up = Vector3(
-        right.y * forward.z - right.z * forward.y,
-        right.z * forward.x - right.x * forward.z, 
-        right.x * forward.y - right.y * forward.x
-    ).normalize();
-    
-    // Transform to camera space
-    float cam_x = relative_pos.x * right.x + relative_pos.y * right.y + relative_pos.z * right.z;
-    float cam_y = relative_pos.x * up.x + relative_pos.y * up.y + relative_pos.z * up.z;
-    float cam_z = relative_pos.x * forward.x + relative_pos.y * forward.y + relative_pos.z * forward.z;
-    
-    // Perspective projection with proper math
-    if (cam_z <= 0.1f) cam_z = 0.1f; // Clamp to prevent division by zero
-    
-    float fov_rad = field_of_view * M_PI / 180.0f;
-    float f = 1.0f / std::tan(fov_rad / 2.0f);
-    
+    // PROPER ORTHOGRAPHIC PROJECTION: camera target at screen center, other points spread out
     sf::Vector2u window_size = window.getSize();
-    float aspect_ratio = static_cast<float>(window_size.x) / static_cast<float>(window_size.y);
     
-    float screen_x = (cam_x * f / (aspect_ratio * cam_z)) * (window_size.x / 2.0f) + (window_size.x / 2.0f);
-    float screen_y = (cam_y * f / cam_z) * (window_size.y / 2.0f) + (window_size.y / 2.0f);
+    // Calculate offset from camera target
+    Vector3 offset = world_pos - camera_target;
+    
+    // Apply both horizontal and vertical rotations
+    float cos_h = std::cos(camera_angle_h);
+    float sin_h = std::sin(camera_angle_h);
+    float cos_v = std::cos(camera_angle_v);
+    float sin_v = std::sin(camera_angle_v);
+    
+    // First apply horizontal rotation (around Y axis)
+    float temp_x = offset.x * cos_h - offset.z * sin_h;
+    float temp_z = offset.x * sin_h + offset.z * cos_h;
+    
+    // Then apply vertical rotation (around X axis)
+    float final_x = temp_x;
+    float final_y = offset.y * cos_v - temp_z * sin_v;
+    // float final_z = offset.y * sin_v + temp_z * cos_v; // Z not used in 2D projection
+    
+    // Scale and map to screen coordinates with camera target at screen center
+    float scale = 15.0f;
+    
+    // Add view_center offset to restore mouse panning functionality (invert for correct direction)
+    float screen_x = window_size.x / 2.0f + final_x * scale - view_center.x;
+    float screen_y = window_size.y / 2.0f - final_y * scale - view_center.y;
     
     return sf::Vector2f(screen_x, screen_y);
 }
@@ -915,6 +913,19 @@ void GraphRenderer::calculate_graph_bounds(const Graph3D& graph, Vector3& min_bo
 
 void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
     window.clear(sf::Color::Black);
+    
+    // FORCE DEFAULT VIEW to prevent coordinate transformation
+    window.setView(window.getDefaultView());
+    
+    // DEBUG: Test where camera target projects to
+    static bool debug_once = true;
+    if (debug_once) {
+        sf::Vector2f target_screen = world_to_screen_3d(camera_target);
+        std::cout << "PROJECTION TEST: Camera target (" << camera_target.x << "," << camera_target.y << "," << camera_target.z 
+                  << ") projects to screen (" << target_screen.x << "," << target_screen.y << ")" << std::endl;
+        std::cout << "Screen center should be (960, 540)" << std::endl;
+        debug_once = false;
+    }
     
     draw_grid();
     draw_axes();

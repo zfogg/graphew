@@ -87,17 +87,22 @@ int main(int argc, char* argv[]) {
         std::vector<std::string> inventory_dims;
         std::vector<std::string> active_items;
         
-        // Check which items have non-zero values across agents
+        // Check which items have actual timestep data (not just non-zero values)
         for (const std::string& item : replay.inventory_items) {
-            bool has_values = false;
+            bool has_timestep_data = false;
             for (const auto& agent : replay.agents) {
                 auto it = agent.inventory_over_time.find(item);
-                if (it != agent.inventory_over_time.end() && !it->second.empty() && it->second.back().value > 0) {
-                    has_values = true;
+                if (it != agent.inventory_over_time.end() && it->second.size() > 0) {
+                    has_timestep_data = true;
                     break;
                 }
             }
-            if (has_values) active_items.push_back(item);
+            if (has_timestep_data) {
+                active_items.push_back(item);
+                std::cout << "Active item found: " << item << std::endl;
+            } else {
+                std::cout << "Skipping item with no data: " << item << std::endl;
+            }
         }
         
         // Use active items or fallback to first available items
@@ -136,10 +141,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Warning: No edges created - agents may not have changed inventory states\n";
     }
     
-    // Center graph around origin first
-    graph3d->center_graph();
-    
-    // Set camera to show entire graph - calculate proper distance from bounds
+    // DON'T center graph - use original positions and point camera at their geometric center
     Vector3 min_bounds, max_bounds;
     renderer->calculate_graph_bounds(*graph3d, min_bounds, max_bounds);
     
@@ -147,15 +149,30 @@ int main(int argc, char* argv[]) {
     Vector3 size = max_bounds - min_bounds;
     float diagonal = std::sqrt(size.x * size.x + size.y * size.y + size.z * size.z);
     
-    // Set camera to look at the actual measured graph center with proper distance to see everything
+    // SYNC WITH FORCE LAYOUT: Camera target matches where force layout centers nodes
+    Vector3 actual_graph_center(0, 0, 0); // Match the force layout target center
+    
+    // Calculate scale needed to fit entire graph in view
+    float max_graph_dimension = std::max({size.x, size.y, size.z});
+    float required_scale = std::min(1920.0f / max_graph_dimension, 1080.0f / max_graph_dimension) * 0.8f; // 80% of screen
+    
+    std::cout << "SYNCHRONIZED CENTERING:" << std::endl;
+    std::cout << "  Graph size: (" << size.x << "," << size.y << "," << size.z << ")" << std::endl;
+    std::cout << "  Camera target: (" << actual_graph_center.x << "," << actual_graph_center.y << "," << actual_graph_center.z << ")" << std::endl;
+    std::cout << "  Force layout centers around: (0, 0, 0)" << std::endl;
+    std::cout << "  Max graph dimension: " << max_graph_dimension << std::endl;
+    
     auto renderer_ptr = renderer.get();
-    renderer_ptr->camera_target = (min_bounds + max_bounds) * 0.5f; // Use geometric center of bounds
-    renderer_ptr->camera_distance = 60.0f; // Much closer to make graph visible
-    renderer_ptr->camera_angle_v = 1.0f; // Slight downward angle for better 3D view
-    renderer_ptr->camera_angle_h = 0.4f; // 45-degree angle for good perspective
+    renderer_ptr->camera_target = actual_graph_center; // Look at visual center for perfect centering
+    renderer_ptr->camera_distance = 100.0f; // Standard distance
+    
+    // Set reasonable camera angles  
+    renderer_ptr->camera_angle_v = 0.3f; // Look down slightly
+    renderer_ptr->camera_angle_h = 0.5f; // Angle for 3D view
     renderer_ptr->update_camera_position();
     
-    std::cout << "Camera set to look at hardcoded graph center from debug data" << std::endl;
+    std::cout << "Camera set - target: (" << renderer_ptr->camera_target.x << "," << renderer_ptr->camera_target.y << "," << renderer_ptr->camera_target.z << ")" << std::endl;
+    std::cout << "Graph bounds: (" << min_bounds.x << "," << min_bounds.y << "," << min_bounds.z << ") to (" << max_bounds.x << "," << max_bounds.y << "," << max_bounds.z << ")" << std::endl;
     
     // Print enhanced camera and lighting controls
     std::cout << "\n╔══════════════════════════════════════════════════════════════╗\n";
@@ -270,7 +287,9 @@ int main(int argc, char* argv[]) {
         // Apply force layout in real-time if running
         if (force_layout_running) {
             int dummy_remaining = layout_params.iterations; // large number, decremented internally but ignored
-            (void)ForceLayoutEngine::apply_force_layout_step(*graph3d, layout_params, dummy_remaining);
+            ForceLayoutEngine::apply_force_layout_step(*graph3d, layout_params, dummy_remaining);
+            
+            // DON'T override camera target - let the user control it
         }
         
         // Regular gentle physics for fine-tuning

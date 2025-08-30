@@ -266,7 +266,12 @@ void ReplayParser::parse_timestamp_array(cJSON* array, std::vector<TimestampValu
 
 void ReplayParser::parse_objects_inventory(cJSON* inventory_array, AgentInventoryState& agent, 
                                           const std::vector<std::string>& item_names) {
-    if (!cJSON_IsArray(inventory_array)) return;
+    if (!cJSON_IsArray(inventory_array)) {
+        std::cout << "ERROR: objects inventory is not an array!" << std::endl;
+        return;
+    }
+    
+    std::cout << "Parsing objects inventory with " << cJSON_GetArraySize(inventory_array) << " entries" << std::endl;
     
     // Initialize inventory tracking for all items
     for (const std::string& item : item_names) {
@@ -375,6 +380,13 @@ void AgentGraphBuilder::build_inventory_dimensional_graph(const ReplayData& repl
                     (heart_qty - 5.0f) * 1.5f       // Center around 5 hearts
                 );
                 
+                // DEBUG: Print first few positions to compare formats
+                if (state_to_node_id.size() < 5) {
+                    std::cout << "Initial node " << state_to_node_id.size() << " position: (" 
+                              << position.x << "," << position.y << "," << position.z 
+                              << ") from inventory: ore=" << ore_qty << " battery=" << battery_qty << " heart=" << heart_qty << std::endl;
+                }
+                
                 Color color = reward_to_color(static_cast<float>(reward_bucket), 10.0f);
                 float node_radius = 0.3f + static_cast<float>(reward_bucket) * 0.1f;
                 
@@ -478,6 +490,18 @@ void AgentGraphBuilder::build_inventory_dimensional_graph(const ReplayData& repl
     std::cout << "Created " << transition_count.size() << " temporal transitions between states\n";
     
     std::cout << "Created " << state_to_node_id.size() << " unique inventory states\n";
+    
+    // DEBUG: Check if objects format is creating any inventory data
+    if (replay.inventory_items.size() > 0 && replay.agents.size() > 0) {
+        const auto& sample_agent = replay.agents[0];
+        std::cout << "DEBUG: Sample agent inventory data size: " << sample_agent.inventory_over_time.size() << std::endl;
+        for (const auto& [item, values] : sample_agent.inventory_over_time) {
+            std::cout << "  " << item << ": " << values.size() << " timesteps" << std::endl;
+            if (!values.empty()) {
+                std::cout << "    First value: " << values[0].value << " at timestep " << values[0].timestep << std::endl;
+            }
+        }
+    }
     
     // Don't apply force layout here - let it happen in real-time for visualization
 }

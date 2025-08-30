@@ -168,10 +168,11 @@ void ForceLayoutEngine::compute_attraction_forces(std::vector<NodePhysics>& phys
 }
 
 void ForceLayoutEngine::apply_centering_force(std::vector<NodePhysics>& physics_nodes, float centering_strength, float dimension) {
-    Vector3 center_of_mass = calculate_center_of_mass(physics_nodes);
+    // Center around a fixed point instead of center of mass - prevents drift
+    Vector3 target_center(0, 0, 0); // Force layout centers around origin
     
     for (auto& node : physics_nodes) {
-        Vector3 to_center = center_of_mass - node.position;
+        Vector3 to_center = target_center - node.position;
         to_center.y *= axis_weight(dimension, 1.0f);
         to_center.z *= axis_weight(dimension, 2.0f);
         node.force = node.force + (to_center * centering_strength);
