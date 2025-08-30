@@ -18,6 +18,7 @@ public:
     };
     
     static void apply_force_layout(Graph3D& graph, const PhysicsParams& params = PhysicsParams());
+    static bool apply_force_layout_step(Graph3D& graph, const PhysicsParams& params, int& remaining_iterations);
     
 private:
     struct NodePhysics {

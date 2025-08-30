@@ -232,41 +232,53 @@ void GraphRenderer::update_camera() {
 void GraphRenderer::draw_grid() {
     if (!show_grid) return;
     
-    const float grid_size = 50.0f;
-    const int grid_lines = 40;
-    const sf::Color grid_color(50, 50, 50, 100);
+    const float grid_size = 5.0f;  // Smaller grid for better scale
+    const int grid_lines = 20;     // Fewer lines to reduce clutter
+    const sf::Color grid_color(50, 50, 50, 80);
     
-    sf::Vector2f view_size = view.getSize();
-    sf::Vector2f view_center_pos = view.getCenter();
+    // Center grid on camera target (where we're looking)
+    Vector3 grid_center = camera_target;
     
     // Create vertex arrays for grid lines
     std::vector<sf::Vertex> vertices;
     
-    // Draw vertical lines
+    // Draw vertical lines (X-Z plane)
     for (int i = -grid_lines; i <= grid_lines; i++) {
-        float x = i * grid_size;
+        Vector3 start(grid_center.x + i * grid_size, grid_center.y, grid_center.z - grid_lines * grid_size);
+        Vector3 end(grid_center.x + i * grid_size, grid_center.y, grid_center.z + grid_lines * grid_size);
+        
+        sf::Vector2f start_2d = world_to_screen_3d(start);
+        sf::Vector2f end_2d = world_to_screen_3d(end);
+        
         sf::Vertex v1, v2;
-        v1.position = sf::Vector2f(x, view_center_pos.y - view_size.y);
+        v1.position = start_2d;
         v1.color = grid_color;
-        v2.position = sf::Vector2f(x, view_center_pos.y + view_size.y);
+        v2.position = end_2d;
         v2.color = grid_color;
         vertices.push_back(v1);
         vertices.push_back(v2);
     }
     
-    // Draw horizontal lines
+    // Draw horizontal lines (X-Z plane)
     for (int i = -grid_lines; i <= grid_lines; i++) {
-        float y = i * grid_size;
+        Vector3 start(grid_center.x - grid_lines * grid_size, grid_center.y, grid_center.z + i * grid_size);
+        Vector3 end(grid_center.x + grid_lines * grid_size, grid_center.y, grid_center.z + i * grid_size);
+        
+        sf::Vector2f start_2d = world_to_screen_3d(start);
+        sf::Vector2f end_2d = world_to_screen_3d(end);
+        
         sf::Vertex v1, v2;
-        v1.position = sf::Vector2f(view_center_pos.x - view_size.x, y);
+        v1.position = start_2d;
         v1.color = grid_color;
-        v2.position = sf::Vector2f(view_center_pos.x + view_size.x, y);
+        v2.position = end_2d;
         v2.color = grid_color;
         vertices.push_back(v1);
         vertices.push_back(v2);
     }
     
-    window.draw(vertices.data(), vertices.size(), sf::PrimitiveType::Lines);
+    if (!vertices.empty()) {
+        window.draw(vertices.data(), vertices.size(), sf::PrimitiveType::Lines);
+    }
 }
 
 void GraphRenderer::draw_axes() {

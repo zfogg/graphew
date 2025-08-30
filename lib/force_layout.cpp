@@ -64,6 +64,54 @@ void ForceLayoutEngine::apply_force_layout(Graph3D& graph, const PhysicsParams& 
     std::cout << "Force layout complete!" << std::endl;
 }
 
+bool ForceLayoutEngine::apply_force_layout_step(Graph3D& graph, const PhysicsParams& params, int& remaining_iterations) {
+    if (graph.node_count == 0 || remaining_iterations <= 0) return false;
+    
+    static std::vector<NodePhysics> physics_nodes;
+    static bool initialized = false;
+    
+    // Initialize on first call
+    if (!initialized || physics_nodes.size() != graph.node_count) {
+        physics_nodes.resize(graph.node_count);
+        
+        for (uint32_t i = 0; i < graph.node_count; i++) {
+            physics_nodes[i].node_id = i;
+            physics_nodes[i].position = graph.nodes[i].position;
+            physics_nodes[i].velocity = Vector3(0, 0, 0);
+            physics_nodes[i].force = Vector3(0, 0, 0);
+        }
+        initialized = true;
+    }
+    
+    // Apply physics for this frame (multiple iterations for faster convergence)
+    int iterations_per_frame = std::min(5, remaining_iterations);
+    
+    for (int iter = 0; iter < iterations_per_frame; iter++) {
+        // Reset forces
+        for (auto& node : physics_nodes) {
+            node.force = Vector3(0, 0, 0);
+        }
+        
+        // Compute all forces
+        compute_repulsion_forces(physics_nodes, params.repel);
+        compute_attraction_forces(physics_nodes, graph, params.attract);
+        apply_centering_force(physics_nodes, params.centering_strength);
+        
+        // Integrate physics
+        integrate_physics(physics_nodes, params.decay, params.dimension);
+        
+        remaining_iterations--;
+        if (remaining_iterations <= 0) break;
+    }
+    
+    // Copy positions back to graph
+    for (uint32_t i = 0; i < graph.node_count; i++) {
+        graph.nodes[i].position = physics_nodes[i].position;
+    }
+    
+    return remaining_iterations > 0;
+}
+
 void ForceLayoutEngine::compute_repulsion_forces(std::vector<NodePhysics>& physics_nodes, float repel_strength) {
     const float min_distance = 0.1f;
     
@@ -122,9 +170,9 @@ void ForceLayoutEngine::apply_centering_force(std::vector<NodePhysics>& physics_
 }
 
 void ForceLayoutEngine::integrate_physics(std::vector<NodePhysics>& physics_nodes, float decay, float dimension) {
-    const float dt = 0.01f; // Much smaller timestep for stability
-    const float max_velocity = 10.0f;
-    const float max_position = 50.0f;
+    const float dt = 0.1f; // Larger timestep for faster convergence
+    const float max_velocity = 50.0f; // Allow much faster movement
+    const float max_position = 100.0f; // Larger bounds
     
     for (auto& node : physics_nodes) {
         // Update velocity with smaller timestep

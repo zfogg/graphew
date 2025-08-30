@@ -16,6 +16,8 @@ TARGETS = $(MAIN_SOURCES:$(SRC_DIR)/%.cpp=$(BIN_DIR)/%)
 
 HEADERS = $(wildcard $(LIB_DIR)/*.hpp)
 
+SOURCES = $(LIB_SOURCES) $(MAIN_SOURCES)
+
 .PHONY: all clean install-deps
 
 all: $(TARGETS)

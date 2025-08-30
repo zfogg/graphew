@@ -479,15 +479,7 @@ void AgentGraphBuilder::build_inventory_dimensional_graph(const ReplayData& repl
     
     std::cout << "Created " << state_to_node_id.size() << " unique inventory states\n";
     
-    // Apply force-directed layout like swaptube does
-    ForceLayoutEngine::PhysicsParams params;
-    params.repel = 0.5f;      // Swaptube-like repulsion
-    params.attract = 0.1f;    // Swaptube-like attraction
-    params.decay = 0.8f;      // Swaptube-like decay
-    params.iterations = 200;  // Much more iterations like swaptube
-    params.dimension = 3.0f;
-    
-    ForceLayoutEngine::apply_force_layout(graph3d, params);
+    // Don't apply force layout here - let it happen in real-time for visualization
 }
 
 void AgentGraphBuilder::build_temporal_graph(const ReplayData& replay, Graph3D& graph3d, int target_agent_id) {
