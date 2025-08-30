@@ -331,3 +331,19 @@ void Graph3D::generate_sample() {
         }
     }
 }
+
+void Graph3D::center_graph() {
+    if (node_count == 0) return;
+    
+    // Calculate center of mass
+    Vector3 center_of_mass(0, 0, 0);
+    for (uint32_t i = 0; i < node_count; i++) {
+        center_of_mass = center_of_mass + nodes[i].position;
+    }
+    center_of_mass = center_of_mass * (1.0f / node_count);
+    
+    // Translate all nodes to center around origin
+    for (uint32_t i = 0; i < node_count; i++) {
+        nodes[i].position = nodes[i].position - center_of_mass;
+    }
+}

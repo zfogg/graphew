@@ -140,10 +140,13 @@ int main(int argc, char* argv[]) {
         std::cerr << "Warning: No edges created - agents may not have changed inventory states\n";
     }
     
-    // Center camera on graph data immediately after loading
+    // Center graph around origin for proper display
+    graph3d->center_graph();
+    
+    // Set camera to look at origin with appropriate distance
     Vector3 min_bounds, max_bounds;
     renderer->calculate_graph_bounds(*graph3d, min_bounds, max_bounds);
-    std::cout << "Graph centered - bounds: (" << min_bounds.x << "," << min_bounds.y << "," << min_bounds.z 
+    std::cout << "Graph centered at origin - bounds: (" << min_bounds.x << "," << min_bounds.y << "," << min_bounds.z 
               << ") to (" << max_bounds.x << "," << max_bounds.y << "," << max_bounds.z << ")" << std::endl;
     
     // Print enhanced camera and lighting controls

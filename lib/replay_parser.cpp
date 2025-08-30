@@ -368,11 +368,11 @@ void AgentGraphBuilder::build_inventory_dimensional_graph(const ReplayData& repl
                     else if (item == "heart") heart_qty = agent.get_inventory_at_time(item, timestep);
                 }
                 
-                // Initialize position based on actual inventory quantities (smart grid)
+                // Initialize in organized grid pattern centered around origin
                 Vector3 position(
-                    ore_qty * 2.0f,      // X-axis: ore quantity
-                    battery_qty * 3.0f,  // Y-axis: battery quantity  
-                    heart_qty * 1.5f     // Z-axis: heart quantity
+                    (ore_qty - 5.0f) * 2.0f,        // Center around 5 ore (typical mid-range)
+                    (battery_qty - 1.0f) * 3.0f,    // Center around 1 battery
+                    (heart_qty - 5.0f) * 1.5f       // Center around 5 hearts
                 );
                 
                 Color color = reward_to_color(static_cast<float>(reward_bucket), 10.0f);

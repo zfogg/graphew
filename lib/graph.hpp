@@ -78,4 +78,5 @@ public:
     bool load_from_json(const std::string& filename);
     bool load_from_compressed_json(const std::string& filename);
     void generate_sample();
+    void center_graph(); // Center all nodes around origin
 };

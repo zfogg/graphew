@@ -155,9 +155,9 @@ void GraphRenderer::handle_events() {
                 camera_move_speed = std::max(1.0f, std::min(50.0f, camera_move_speed + delta * 2.0f));
                 std::cout << "Camera speed: " << camera_move_speed << std::endl;
             }
-            // Normal scroll for zoom
+            // Normal scroll for zoom - allow much closer inspection
             else {
-                camera_distance = std::max(5.0f, std::min(100.0f, camera_distance - delta * 2.0f));
+                camera_distance = std::max(1.0f, std::min(200.0f, camera_distance - delta * 2.0f));
             }
         }
         else if (auto* keyPress = event->getIf<sf::Event::KeyPressed>()) {
@@ -502,7 +502,7 @@ void GraphRenderer::handle_camera_movement(float delta_time) {
 }
 
 void GraphRenderer::update_camera_position() {
-    // Calculate 3D camera position based on angles
+    // Calculate 3D camera position based on angles, ensuring proper centering
     camera_position.x = camera_target.x + camera_distance * std::cos(camera_angle_v) * std::cos(camera_angle_h);
     camera_position.y = camera_target.y + camera_distance * std::sin(camera_angle_v);
     camera_position.z = camera_target.z + camera_distance * std::cos(camera_angle_v) * std::sin(camera_angle_h);
@@ -522,10 +522,13 @@ sf::Vector2f GraphRenderer::world_to_screen_3d(const Vector3& world_pos) {
     float cam_y = relative_pos.x * up.x + relative_pos.y * up.y + relative_pos.z * up.z;
     float cam_z = relative_pos.x * forward.x + relative_pos.y * forward.y + relative_pos.z * forward.z;
     
-    // Perspective projection
+    // Perspective projection - ensure proper centering
     float perspective_scale = apply_perspective(cam_z);
-    float screen_x = cam_x * perspective_scale + DEFAULT_SCREEN_WIDTH / 2.0f;
-    float screen_y = -cam_y * perspective_scale + DEFAULT_SCREEN_HEIGHT / 2.0f; // Flip Y
+    
+    // Get current window size for proper centering
+    sf::Vector2u window_size = window.getSize();
+    float screen_x = cam_x * perspective_scale + window_size.x / 2.0f;
+    float screen_y = -cam_y * perspective_scale + window_size.y / 2.0f; // Flip Y
     
     return sf::Vector2f(screen_x, screen_y);
 }
@@ -855,25 +858,27 @@ void GraphRenderer::calculate_graph_bounds(const Graph3D& graph, Vector3& min_bo
     Vector3 size = max_bounds - min_bounds;
     float max_dimension = std::max({size.x, size.y, size.z});
     
-    camera_target = center;
-    scene_center = center; // use world-relative center for lighting and overlays
-    camera_distance = std::min(max_dimension * 1.5f + 10.0f, 100.0f); // Closer camera, max distance cap
+    // This method can't modify the const graph - centering should be done before calling this
+    
+    // Now camera can look at origin and graph will be centered
+    camera_target = Vector3(0, 0, 0);
+    scene_center = Vector3(0, 0, 0); // centered at origin now
+    
+    // Set appropriate camera distance and angle for good initial view
+    camera_distance = 30.0f; // Fixed distance that works well
+    camera_angle_v = 0.3f; // Good downward angle
+    camera_angle_h = 0.785f; // 45-degree angle
+    
+    std::cout << "Camera positioned at distance " << camera_distance << " looking at (" 
+              << center.x << "," << center.y << "," << center.z << ")" << std::endl;
+    
     update_camera_position();
 }
 
 void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
     window.clear(sf::Color::Black);
     
-    // Auto-adjust camera to fit graph on first frame
-    static bool first_frame = true;
-    if (first_frame && graph.node_count > 0) {
-        Vector3 min_bounds, max_bounds;
-        calculate_graph_bounds(graph, min_bounds, max_bounds);
-        std::cout << "Graph bounds: (" << min_bounds.x << "," << min_bounds.y << "," << min_bounds.z 
-                  << ") to (" << max_bounds.x << "," << max_bounds.y << "," << max_bounds.z << ")" << std::endl;
-        std::cout << "Camera distance set to: " << camera_distance << std::endl;
-        first_frame = false;
-    }
+    // Skip auto-adjustment - centering should be done at startup
     
     draw_grid();
     draw_axes();
