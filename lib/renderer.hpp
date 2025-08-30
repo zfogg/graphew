@@ -22,8 +22,8 @@ struct CameraPreset {
     float distance;
     float fov;
     bool valid;
-    
-    CameraPreset() : position(0,0,15), target(0,0,0), angle_h(0), angle_v(0.3f), 
+
+    CameraPreset() : position(0,0,15), target(0,0,0), angle_h(0), angle_v(0.3f),
                      distance(15.0f), fov(60.0f), valid(false) {}
 };
 
@@ -44,8 +44,8 @@ struct LightingParams {
     float contour_intensity;    // strength of height contour effect
     float contour_frequency;    // frequency of contour bands
     float contour_offset;       // phase/offset of contour bands
-    
-    LightingParams() : directional_light_dir(0.5f, -0.7f, 0.5f), 
+
+    LightingParams() : directional_light_dir(0.5f, -0.7f, 0.5f),
                        directional_intensity(0.8f),
                        ambient_intensity(0.3f),
                        light_color(255, 245, 220),  // Warm white
@@ -69,7 +69,7 @@ public:
     float zoom_level;
     float zoom_speed;
     sf::Vector2f view_center;
-    
+
     // 3D camera parameters
     Vector3 camera_position;
     Vector3 camera_target;
@@ -79,31 +79,31 @@ public:
     bool auto_rotate;
     float auto_rotate_speed;
     sf::Clock rotation_clock;
-    
+
     // Enhanced camera controls
     float camera_move_speed;
     float camera_rotate_speed;
     float field_of_view;
     bool smooth_camera;
     Vector3 camera_velocity;
-    
+
     // Camera presets (0-9 keys)
     std::array<CameraPreset, 10> camera_presets;
-    
+
     // Lighting system
     LightingParams lighting;
     bool show_axes;
     bool show_grid;
     Vector3 scene_center;
-    
+
     // UI font
     sf::Font ui_font;
     bool ui_font_loaded;
     float render_dimension = 3.0f; // 1..3 for render-space scaling
-    
+
     GraphRenderer();
     ~GraphRenderer();
-    
+
     void init_window(const std::string& title);
     void update_camera();
     void render_frame(const Graph3D& graph, const Pixels& overlay = Pixels());
@@ -112,24 +112,24 @@ public:
     void reset_camera();
     void calculate_graph_bounds(const Graph3D& graph, Vector3& min_bounds, Vector3& max_bounds);
     void update_camera_position(); // Make this public
-    
+
     // Camera preset management
     void save_camera_preset(int slot);
     void load_camera_preset(int slot);
-    
+
     // Lighting controls
     void adjust_lighting(float ambient_delta, float directional_delta);
     void rotate_light(float horizontal, float vertical);
     void toggle_shadows() { lighting.shadows_enabled = !lighting.shadows_enabled; }
     void set_fog_density(float density) { lighting.fog_density = density; }
-    
+
     // Help overlay
     Pixels create_help_overlay();
     bool show_help;
-    
+
     // Expose UI drawing for sliders
     void draw_ui_sliders();
-    
+
     // Simple UI sliders
     struct UISlider {
         std::string label;
@@ -141,10 +141,10 @@ public:
         bool dragging;
         UISlider() : target(nullptr), min_value(0), max_value(1), last_value(0), rect_px(), dragging(false) {}
     };
-    
+
     void clear_sliders();
     void add_slider(const std::string& label, float* target, float min_value, float max_value);
-    
+
 private:
     void handle_events();
     void handle_ui_event(const sf::Event& ev);

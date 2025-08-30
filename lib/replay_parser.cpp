@@ -224,6 +224,17 @@ bool ReplayParser::parse_json_data(const char* json_str, ReplayData& replay_data
                             agent.inventory_over_time[item] = values;
                         }
                     }
+                    
+                    // Parse reward data for grid_objects format
+                    cJSON* reward = cJSON_GetObjectItem(obj, "reward");
+                    if (cJSON_IsArray(reward)) {
+                        parse_timestamp_array(reward, agent.reward_over_time);
+                    }
+                    
+                    cJSON* total_reward = cJSON_GetObjectItem(obj, "total_reward");
+                    if (cJSON_IsArray(total_reward)) {
+                        parse_timestamp_array(total_reward, agent.total_reward_over_time);
+                    }
                 } else if (is_pufferbox_format) {
                     // Pufferbox format with agent:inv: prefix and dots in names
                     std::vector<std::string> agent_inv_items = {
@@ -398,7 +409,8 @@ void AgentGraphBuilder::build_inventory_dimensional_graph(const ReplayData& repl
                     state_sig += item + std::to_string(qty) + "_";
                 }
             }
-            int reward_bucket = static_cast<int>(agent.get_total_reward_at_time(timestep));
+            float total_reward = agent.get_total_reward_at_time(timestep);
+            int reward_bucket = static_cast<int>(total_reward * 10); // Scale up for better bucketing
             state_sig += "R" + std::to_string(reward_bucket);
             
             // Add node if this state is new
@@ -425,8 +437,16 @@ void AgentGraphBuilder::build_inventory_dimensional_graph(const ReplayData& repl
                               << ") from inventory: ore=" << ore_qty << " battery=" << battery_qty << " heart=" << heart_qty << std::endl;
                 }
                 
-                Color color = reward_to_color(static_cast<float>(reward_bucket), 10.0f);
+                Color color = reward_to_color(total_reward, 20.0f); // Use actual reward value, not bucket
                 float node_radius = 0.3f + static_cast<float>(reward_bucket) * 0.1f;
+                
+                // DEBUG: Print color assignment for first few states
+                static int debug_count = 0;
+                if (debug_count < 5) {
+                    std::cout << "State with reward " << reward_bucket << " gets color: (" 
+                              << (int)color.r << "," << (int)color.g << "," << (int)color.b << ")" << std::endl;
+                    debug_count++;
+                }
                 
                 std::string label = "State_R" + std::to_string(reward_bucket);
                 uint32_t node_id = graph3d.add_node(position, color, node_radius, label);

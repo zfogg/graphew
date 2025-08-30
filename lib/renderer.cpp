@@ -571,12 +571,13 @@ sf::Vector2f GraphRenderer::world_to_screen_3d(const Vector3& world_pos) {
     float final_y = offset.y * cos_v - temp_z * sin_v;
     // float final_z = offset.y * sin_v + temp_z * cos_v; // Z not used in 2D projection
 
-    // Scale and map to screen coordinates with camera target at screen center
-    float scale = 15.0f;
+    // Scale based on camera distance for proper zoom functionality
+    float base_scale = 15.0f;
+    float zoom_scale = base_scale * (50.0f / camera_distance); // Closer camera = bigger scale = zoomed in
 
     // Add view_center offset to restore mouse panning functionality (invert for correct direction)
-    float screen_x = window_size.x / 2.0f + final_x * scale - view_center.x;
-    float screen_y = window_size.y / 2.0f - final_y * scale - view_center.y;
+    float screen_x = window_size.x / 2.0f + final_x * zoom_scale - view_center.x;
+    float screen_y = window_size.y / 2.0f - final_y * zoom_scale - view_center.y;
 
     return sf::Vector2f(screen_x, screen_y);
 }
