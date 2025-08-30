@@ -1177,11 +1177,17 @@ void GraphRenderer::layout_ui_checkboxes() {
 }
 
 void GraphRenderer::handle_checkbox_event(const sf::Event& ev) {
+    if (!ui_font_loaded || ui_checkboxes.empty()) return;
+    
     if (auto* pressed = ev.getIf<sf::Event::MouseButtonPressed>()) {
         if (pressed->button == sf::Mouse::Button::Left) {
+            // Make sure checkboxes are laid out for current window
+            layout_ui_checkboxes();
+            
             sf::Vector2f mouse_pos(static_cast<float>(pressed->position.x), 
                                   static_cast<float>(pressed->position.y));
             
+            // Check each checkbox
             for (auto& cb : ui_checkboxes) {
                 if (mouse_pos.x >= cb.rect_px.left && 
                     mouse_pos.x <= cb.rect_px.left + cb.rect_px.width &&
@@ -1192,9 +1198,10 @@ void GraphRenderer::handle_checkbox_event(const sf::Event& ev) {
                     if (cb.target) {
                         *cb.target = !(*cb.target);
                         cb.last_value = *cb.target;
+                        std::cout << "Toggled checkbox: " << cb.label << " = " << (*cb.target ? "true" : "false") << "\n";
                     }
                     ui_mouse_captured = true;
-                    break;
+                    return;
                 }
             }
         }
@@ -1203,6 +1210,13 @@ void GraphRenderer::handle_checkbox_event(const sf::Event& ev) {
 
 void GraphRenderer::draw_ui_checkboxes() {
     if (ui_checkboxes.empty() || !ui_font_loaded) return;
+    
+    // Switch to default view for UI rendering
+    sf::View original_view = window.getView();
+    window.setView(window.getDefaultView());
+    
+    // Re-layout for current window size
+    layout_ui_checkboxes();
     
     // Position in top-right corner
     sf::Vector2u window_size = window.getSize();
@@ -1214,8 +1228,8 @@ void GraphRenderer::draw_ui_checkboxes() {
     // Draw checkbox background panel
     sf::RectangleShape panel(sf::Vector2f(panel_width, panel_height));
     panel.setPosition(sf::Vector2f(panel_x, panel_y));
-    panel.setFillColor(sf::Color(30, 30, 40, 220));
-    panel.setOutlineColor(sf::Color(100, 100, 120, 255));
+    panel.setFillColor(sf::Color(20, 20, 26, 180));
+    panel.setOutlineColor(sf::Color(90, 90, 120, 200));
     panel.setOutlineThickness(1.0f);
     window.draw(panel);
     
@@ -1267,4 +1281,7 @@ void GraphRenderer::draw_ui_checkboxes() {
         label.setPosition(sf::Vector2f(cb.rect_px.left + cb.rect_px.width + 10.0f, cb.rect_px.top + 2.0f));
         window.draw(label);
     }
+    
+    // Restore original view
+    window.setView(original_view);
 }
