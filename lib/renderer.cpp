@@ -5,7 +5,18 @@
 GraphRenderer::GraphRenderer() 
     : zoom_level(1.0f), zoom_speed(0.1f), view_center(0, 0),
       camera_position(0, 0, 15), camera_target(0, 0, 0), camera_distance(15.0f),
-      camera_angle_h(0.0f), camera_angle_v(0.3f), auto_rotate(true), auto_rotate_speed(0.3f) {
+      camera_angle_h(0.0f), camera_angle_v(0.3f), auto_rotate(false), auto_rotate_speed(0.3f),
+      camera_move_speed(10.0f), camera_rotate_speed(2.0f), field_of_view(60.0f),
+      smooth_camera(true), camera_velocity(0, 0, 0), show_axes(false), show_grid(true),
+      show_help(false) {
+    // Initialize default camera presets
+    camera_presets[0].position = Vector3(15, 10, 15);
+    camera_presets[0].target = Vector3(0, 0, 0);
+    camera_presets[0].angle_h = 0.785f;  // 45 degrees
+    camera_presets[0].angle_v = 0.5f;
+    camera_presets[0].distance = 25.0f;
+    camera_presets[0].fov = 60.0f;
+    camera_presets[0].valid = true;
 }
 
 GraphRenderer::~GraphRenderer() {
@@ -30,19 +41,121 @@ void GraphRenderer::handle_events() {
         }
         else if (auto* mouseWheel = event->getIf<sf::Event::MouseWheelScrolled>()) {
             float delta = mouseWheel->delta;
-            zoom_level *= (1.0f + delta * zoom_speed);
-            zoom_level = std::max(0.1f, std::min(zoom_level, 5.0f));
             
-            view.setSize(sf::Vector2f(DEFAULT_SCREEN_WIDTH / zoom_level, DEFAULT_SCREEN_HEIGHT / zoom_level));
-            window.setView(view);
+            // Shift+scroll adjusts FOV
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift)) {
+                field_of_view = std::max(20.0f, std::min(120.0f, field_of_view - delta * 5.0f));
+                std::cout << "FOV: " << field_of_view << "°" << std::endl;
+            }
+            // Ctrl+scroll adjusts camera speed
+            else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
+                camera_move_speed = std::max(1.0f, std::min(50.0f, camera_move_speed + delta * 2.0f));
+                std::cout << "Camera speed: " << camera_move_speed << std::endl;
+            }
+            // Normal scroll for zoom
+            else {
+                camera_distance = std::max(5.0f, std::min(100.0f, camera_distance - delta * 2.0f));
+            }
         }
         else if (auto* keyPress = event->getIf<sf::Event::KeyPressed>()) {
-            if (keyPress->code == sf::Keyboard::Key::R) {
+            // Camera presets (0-9)
+            if (keyPress->code == sf::Keyboard::Key::Num0) {
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
+                    save_camera_preset(0);
+                } else {
+                    load_camera_preset(0);
+                }
+            }
+            else if (keyPress->code == sf::Keyboard::Key::Num1) {
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
+                    save_camera_preset(1);
+                } else {
+                    load_camera_preset(1);
+                }
+            }
+            else if (keyPress->code == sf::Keyboard::Key::Num2) {
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
+                    save_camera_preset(2);
+                } else {
+                    load_camera_preset(2);
+                }
+            }
+            else if (keyPress->code == sf::Keyboard::Key::Num3) {
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
+                    save_camera_preset(3);
+                } else {
+                    load_camera_preset(3);
+                }
+            }
+            else if (keyPress->code == sf::Keyboard::Key::Num4) {
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
+                    save_camera_preset(4);
+                } else {
+                    load_camera_preset(4);
+                }
+            }
+            else if (keyPress->code == sf::Keyboard::Key::Num5) {
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
+                    save_camera_preset(5);
+                } else {
+                    load_camera_preset(5);
+                }
+            }
+            else if (keyPress->code == sf::Keyboard::Key::Num6) {
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
+                    save_camera_preset(6);
+                } else {
+                    load_camera_preset(6);
+                }
+            }
+            else if (keyPress->code == sf::Keyboard::Key::Num7) {
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
+                    save_camera_preset(7);
+                } else {
+                    load_camera_preset(7);
+                }
+            }
+            else if (keyPress->code == sf::Keyboard::Key::Num8) {
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
+                    save_camera_preset(8);
+                } else {
+                    load_camera_preset(8);
+                }
+            }
+            else if (keyPress->code == sf::Keyboard::Key::Num9) {
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
+                    save_camera_preset(9);
+                } else {
+                    load_camera_preset(9);
+                }
+            }
+            // Toggle features
+            else if (keyPress->code == sf::Keyboard::Key::R) {
                 reset_camera();
             }
             else if (keyPress->code == sf::Keyboard::Key::Space) {
                 auto_rotate = !auto_rotate;
                 std::cout << "Auto-rotation " << (auto_rotate ? "enabled" : "disabled") << std::endl;
+            }
+            else if (keyPress->code == sf::Keyboard::Key::G) {
+                show_grid = !show_grid;
+                std::cout << "Grid " << (show_grid ? "shown" : "hidden") << std::endl;
+            }
+            else if (keyPress->code == sf::Keyboard::Key::X) {
+                show_axes = !show_axes;
+                std::cout << "Axes " << (show_axes ? "shown" : "hidden") << std::endl;
+            }
+            else if (keyPress->code == sf::Keyboard::Key::H) {
+                show_help = !show_help;
+                std::cout << "Help " << (show_help ? "shown" : "hidden") << std::endl;
+            }
+            else if (keyPress->code == sf::Keyboard::Key::F) {
+                lighting.fog_density = (lighting.fog_density > 0) ? 0.0f : 0.02f;
+                std::cout << "Fog " << ((lighting.fog_density > 0) ? "enabled" : "disabled") << std::endl;
+            }
+            else if (keyPress->code == sf::Keyboard::Key::S && sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift)) {
+                toggle_shadows();
+                std::cout << "Shadows " << (lighting.shadows_enabled ? "enabled" : "disabled") << std::endl;
             }
         }
     }
@@ -70,20 +183,52 @@ void GraphRenderer::handle_events() {
 void GraphRenderer::update_camera() {
     handle_events();
     
+    float delta_time = rotation_clock.restart().asSeconds();
+    
     // Auto-rotation for full graph visibility
     if (auto_rotate) {
-        float time = rotation_clock.getElapsedTime().asSeconds();
-        camera_angle_h += auto_rotate_speed * time;
-        rotation_clock.restart();
-        
+        camera_angle_h += auto_rotate_speed * delta_time;
         // Gentle vertical oscillation
-        camera_angle_v = 0.3f + 0.2f * std::sin(time * 0.3f);
+        camera_angle_v = 0.3f + 0.2f * std::sin(rotation_clock.getElapsedTime().asSeconds() * 0.3f);
+    } else {
+        // Manual camera movement
+        handle_camera_movement(delta_time);
+    }
+    
+    // Lighting controls
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::I)) {
+        adjust_lighting(0.01f, 0);
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K)) {
+        adjust_lighting(-0.01f, 0);
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::L)) {
+        adjust_lighting(0, 0.01f);
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::J)) {
+        adjust_lighting(0, -0.01f);
+    }
+    
+    // Light rotation with numpad
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Numpad4)) {
+        rotate_light(-delta_time, 0);
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Numpad6)) {
+        rotate_light(delta_time, 0);
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Numpad8)) {
+        rotate_light(0, delta_time);
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Numpad2)) {
+        rotate_light(0, -delta_time);
     }
     
     update_camera_position();
 }
 
 void GraphRenderer::draw_grid() {
+    if (!show_grid) return;
+    
     const float grid_size = 50.0f;
     const int grid_lines = 40;
     const sf::Color grid_color(50, 50, 50, 100);
@@ -121,6 +266,128 @@ void GraphRenderer::draw_grid() {
     window.draw(vertices.data(), vertices.size(), sf::PrimitiveType::Lines);
 }
 
+void GraphRenderer::draw_axes() {
+    if (!show_axes) return;
+    
+    // Draw XYZ axes
+    const float axis_length = 100.0f;
+    
+    // X axis - Red
+    Vector3 x_start(0, 0, 0);
+    Vector3 x_end(axis_length, 0, 0);
+    sf::Vector2f x_start_2d = world_to_screen_3d(x_start);
+    sf::Vector2f x_end_2d = world_to_screen_3d(x_end);
+    
+    // Y axis - Green  
+    Vector3 y_start(0, 0, 0);
+    Vector3 y_end(0, axis_length, 0);
+    sf::Vector2f y_start_2d = world_to_screen_3d(y_start);
+    sf::Vector2f y_end_2d = world_to_screen_3d(y_end);
+    
+    // Z axis - Blue
+    Vector3 z_start(0, 0, 0);
+    Vector3 z_end(0, 0, axis_length);
+    sf::Vector2f z_start_2d = world_to_screen_3d(z_start);
+    sf::Vector2f z_end_2d = world_to_screen_3d(z_end);
+    
+    // Draw axes
+    std::vector<sf::Vertex> vertices;
+    
+    // X axis
+    sf::Vertex vx1, vx2;
+    vx1.position = x_start_2d;
+    vx1.color = sf::Color::Red;
+    vx2.position = x_end_2d;
+    vx2.color = sf::Color::Red;
+    vertices.push_back(vx1);
+    vertices.push_back(vx2);
+    
+    // Y axis
+    sf::Vertex vy1, vy2;
+    vy1.position = y_start_2d;
+    vy1.color = sf::Color::Green;
+    vy2.position = y_end_2d;
+    vy2.color = sf::Color::Green;
+    vertices.push_back(vy1);
+    vertices.push_back(vy2);
+    
+    // Z axis
+    sf::Vertex vz1, vz2;
+    vz1.position = z_start_2d;
+    vz1.color = sf::Color::Blue;
+    vz2.position = z_end_2d;
+    vz2.color = sf::Color::Blue;
+    vertices.push_back(vz1);
+    vertices.push_back(vz2);
+    
+    window.draw(vertices.data(), vertices.size(), sf::PrimitiveType::Lines);
+}
+
+void GraphRenderer::handle_camera_movement(float delta_time) {
+    // Camera rotation with arrow keys or mouse right-drag
+    if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Right)) {
+        sf::Vector2i mouse_pos = sf::Mouse::getPosition(window);
+        sf::Vector2f current_mouse = static_cast<sf::Vector2f>(mouse_pos);
+        
+        if (last_mouse_position.x != 0 || last_mouse_position.y != 0) {
+            sf::Vector2f delta = current_mouse - last_mouse_position;
+            camera_angle_h += delta.x * 0.01f * camera_rotate_speed;
+            camera_angle_v -= delta.y * 0.01f * camera_rotate_speed;
+            camera_angle_v = std::max(-1.5f, std::min(1.5f, camera_angle_v));
+        }
+        
+        last_mouse_position = current_mouse;
+    } else if (!sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
+        last_mouse_position = sf::Vector2f(0, 0);
+    }
+    
+    // Keyboard rotation
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left)) {
+        camera_angle_h -= camera_rotate_speed * delta_time;
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) {
+        camera_angle_h += camera_rotate_speed * delta_time;
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up)) {
+        camera_angle_v = std::min(1.5f, camera_angle_v + camera_rotate_speed * delta_time);
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down)) {
+        camera_angle_v = std::max(-1.5f, camera_angle_v - camera_rotate_speed * delta_time);
+    }
+    
+    // WASD movement relative to camera direction
+    Vector3 movement(0, 0, 0);
+    Vector3 forward = (camera_target - camera_position).normalize();
+    Vector3 right = Vector3(forward.z, 0, -forward.x).normalize();
+    
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W)) {
+        movement = movement + forward * camera_move_speed * delta_time;
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S)) {
+        movement = movement - forward * camera_move_speed * delta_time;
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) {
+        movement = movement - right * camera_move_speed * delta_time;
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) {
+        movement = movement + right * camera_move_speed * delta_time;
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Q)) {
+        movement.y -= camera_move_speed * delta_time;
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E)) {
+        movement.y += camera_move_speed * delta_time;
+    }
+    
+    // Apply movement with smoothing
+    if (smooth_camera) {
+        camera_velocity = camera_velocity * 0.9f + movement * 0.1f;
+        camera_target = camera_target + camera_velocity;
+    } else {
+        camera_target = camera_target + movement;
+    }
+}
+
 void GraphRenderer::update_camera_position() {
     // Calculate 3D camera position based on angles
     camera_position.x = camera_target.x + camera_distance * std::cos(camera_angle_v) * std::cos(camera_angle_h);
@@ -151,12 +418,132 @@ sf::Vector2f GraphRenderer::world_to_screen_3d(const Vector3& world_pos) {
 }
 
 float GraphRenderer::apply_perspective(float z_depth) {
-    float fov = 60.0f; // Field of view in degrees
-    float focal_length = DEFAULT_SCREEN_HEIGHT / (2.0f * std::tan(fov * M_PI / 360.0f));
+    float focal_length = DEFAULT_SCREEN_HEIGHT / (2.0f * std::tan(field_of_view * M_PI / 360.0f));
     
     // Prevent division by zero and clamp minimum distance
     float safe_z = std::max(z_depth, 0.1f);
     return focal_length / safe_z * zoom_level;
+}
+
+sf::Color GraphRenderer::apply_lighting(const Vector3& /* position */, const Vector3& normal, const sf::Color& base_color) {
+    // Normalize light direction
+    Vector3 light_dir = lighting.directional_light_dir.normalize();
+    
+    // Calculate diffuse lighting (Lambertian)
+    float dot_product = std::max(0.0f, -(normal.x * light_dir.x + normal.y * light_dir.y + normal.z * light_dir.z));
+    float diffuse = lighting.directional_intensity * dot_product;
+    
+    // Total light = ambient + diffuse
+    float total_light = std::min(1.0f, lighting.ambient_intensity + diffuse);
+    
+    // Apply light color tint
+    float r = base_color.r * total_light * (lighting.light_color.r / 255.0f);
+    float g = base_color.g * total_light * (lighting.light_color.g / 255.0f);
+    float b = base_color.b * total_light * (lighting.light_color.b / 255.0f);
+    
+    return sf::Color(
+        std::min(255.0f, r),
+        std::min(255.0f, g),
+        std::min(255.0f, b),
+        base_color.a
+    );
+}
+
+sf::Color GraphRenderer::apply_fog(const sf::Color& color, float depth) {
+    if (lighting.fog_density <= 0) return color;
+    
+    // Calculate fog factor based on depth
+    float fog_factor = 0.0f;
+    if (depth < lighting.fog_start) {
+        fog_factor = 0.0f;
+    } else if (depth > lighting.fog_end) {
+        fog_factor = 1.0f;
+    } else {
+        fog_factor = (depth - lighting.fog_start) / (lighting.fog_end - lighting.fog_start);
+        fog_factor = std::pow(fog_factor, 2.0f); // Quadratic fog
+    }
+    
+    fog_factor *= lighting.fog_density;
+    fog_factor = std::min(1.0f, fog_factor);
+    
+    // Fog color (slightly bluish-gray)
+    sf::Color fog_color(100, 110, 120);
+    
+    return sf::Color(
+        color.r * (1 - fog_factor) + fog_color.r * fog_factor,
+        color.g * (1 - fog_factor) + fog_color.g * fog_factor,
+        color.b * (1 - fog_factor) + fog_color.b * fog_factor,
+        color.a
+    );
+}
+
+float GraphRenderer::calculate_depth_shade(float depth) {
+    // Create depth-based shading for better 3D perception
+    float normalized_depth = (depth - 5.0f) / 50.0f; // Normalize to 0-1 range
+    normalized_depth = std::max(0.0f, std::min(1.0f, normalized_depth));
+    
+    // Darker when further away
+    return 1.0f - normalized_depth * 0.5f;
+}
+
+void GraphRenderer::save_camera_preset(int slot) {
+    if (slot < 0 || slot >= 10) return;
+    
+    camera_presets[slot].position = camera_position;
+    camera_presets[slot].target = camera_target;
+    camera_presets[slot].angle_h = camera_angle_h;
+    camera_presets[slot].angle_v = camera_angle_v;
+    camera_presets[slot].distance = camera_distance;
+    camera_presets[slot].fov = field_of_view;
+    camera_presets[slot].valid = true;
+    
+    std::cout << "Saved camera preset to slot " << slot << std::endl;
+}
+
+void GraphRenderer::load_camera_preset(int slot) {
+    if (slot < 0 || slot >= 10) return;
+    if (!camera_presets[slot].valid) {
+        std::cout << "No preset saved in slot " << slot << std::endl;
+        return;
+    }
+    
+    camera_position = camera_presets[slot].position;
+    camera_target = camera_presets[slot].target;
+    camera_angle_h = camera_presets[slot].angle_h;
+    camera_angle_v = camera_presets[slot].angle_v;
+    camera_distance = camera_presets[slot].distance;
+    field_of_view = camera_presets[slot].fov;
+    
+    std::cout << "Loaded camera preset from slot " << slot << std::endl;
+}
+
+void GraphRenderer::adjust_lighting(float ambient_delta, float directional_delta) {
+    lighting.ambient_intensity = std::max(0.0f, std::min(1.0f, lighting.ambient_intensity + ambient_delta));
+    lighting.directional_intensity = std::max(0.0f, std::min(1.0f, lighting.directional_intensity + directional_delta));
+    
+    if (ambient_delta != 0) {
+        std::cout << "Ambient light: " << (int)(lighting.ambient_intensity * 100) << "%" << std::endl;
+    }
+    if (directional_delta != 0) {
+        std::cout << "Directional light: " << (int)(lighting.directional_intensity * 100) << "%" << std::endl;
+    }
+}
+
+void GraphRenderer::rotate_light(float horizontal, float vertical) {
+    // Convert light direction to spherical coordinates
+    float length = lighting.directional_light_dir.length();
+    float theta = std::atan2(lighting.directional_light_dir.z, lighting.directional_light_dir.x);
+    float phi = std::acos(lighting.directional_light_dir.y / length);
+    
+    // Apply rotation
+    theta += horizontal;
+    phi += vertical;
+    phi = std::max(0.1f, std::min(3.14f, phi));
+    
+    // Convert back to Cartesian
+    lighting.directional_light_dir.x = length * std::sin(phi) * std::cos(theta);
+    lighting.directional_light_dir.y = length * std::cos(phi);
+    lighting.directional_light_dir.z = length * std::sin(phi) * std::sin(theta);
 }
 
 void GraphRenderer::reset_camera() {
@@ -164,12 +551,97 @@ void GraphRenderer::reset_camera() {
     camera_angle_h = 0.0f;
     camera_angle_v = 0.3f;
     camera_target = Vector3(0, 0, 0);
+    field_of_view = 60.0f;
     zoom_level = 1.0f;
     view_center = sf::Vector2f(0, 0);
     view.setCenter(view_center);
     view.setSize(sf::Vector2f(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT));
     window.setView(view);
     update_camera_position();
+}
+
+Pixels GraphRenderer::create_help_overlay() {
+    Pixels help(600, 700);
+    help.fill(argb(200, 30, 30, 40));
+    
+    // Title
+    help.fill_rect(0, 0, 600, 40, argb(255, 50, 50, 70));
+    
+    // Create text sections (simulated with colored blocks for now)
+    int y = 50;
+    int line_height = 25;
+    
+    // Camera controls section
+    help.fill_rect(10, y, 580, 2, argb(255, 100, 150, 200));
+    y += line_height;
+    
+    // Movement controls
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200)); // W
+    y += line_height;
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200)); // A
+    y += line_height;
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200)); // S
+    y += line_height;
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200)); // D
+    y += line_height;
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200)); // Q
+    y += line_height;
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200)); // E
+    y += line_height;
+    
+    // Rotation controls
+    y += 10;
+    help.fill_rect(10, y, 580, 2, argb(255, 100, 150, 200));
+    y += line_height;
+    
+    // Arrow keys
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200));
+    y += line_height;
+    
+    // Lighting controls section
+    y += 10;
+    help.fill_rect(10, y, 580, 2, argb(255, 200, 150, 100));
+    y += line_height;
+    
+    // Light intensity
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200)); // I
+    y += line_height;
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200)); // K
+    y += line_height;
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200)); // L
+    y += line_height;
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200)); // J
+    y += line_height;
+    
+    // Visual effects section
+    y += 10;
+    help.fill_rect(10, y, 580, 2, argb(255, 150, 200, 150));
+    y += line_height;
+    
+    // Toggle controls
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200)); // F
+    y += line_height;
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200)); // G
+    y += line_height;
+    help.fill_rect(20, y, 10, 10, argb(255, 200, 200, 200)); // X
+    y += line_height;
+    
+    // Camera presets section
+    y += 10;
+    help.fill_rect(10, y, 580, 2, argb(255, 200, 200, 100));
+    y += line_height;
+    
+    // Preset indicators
+    for (int i = 0; i < 10; i++) {
+        int x = 20 + i * 55;
+        if (camera_presets[i].valid) {
+            help.fill_rect(x, y, 45, 20, argb(255, 100, 200, 100));
+        } else {
+            help.fill_rect(x, y, 45, 20, argb(100, 100, 100, 100));
+        }
+    }
+    
+    return help;
 }
 
 void GraphRenderer::calculate_graph_bounds(const Graph3D& graph, Vector3& min_bounds, Vector3& max_bounds) {
@@ -217,16 +689,10 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
     }
     
     draw_grid();
+    draw_axes();
     
-    // Draw edges with 3D perspective
+    // Draw edges with 3D perspective and lighting
     std::vector<sf::Vertex> edge_vertices;
-    
-    // Debug: Print edge count
-    static bool printed_debug = false;
-    if (!printed_debug) {
-        std::cout << "Rendering " << graph.edge_count << " edges" << std::endl;
-        printed_debug = true;
-    }
     
     for (uint32_t i = 0; i < graph.edge_count; i++) {
         const GraphEdge& edge = graph.edges[i];
@@ -238,16 +704,25 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         sf::Vector2f from_pos = world_to_screen_3d(from_node.position);
         sf::Vector2f to_pos = world_to_screen_3d(to_node.position);
         
-        // Debug: Check edge coordinates
-        if (i < 3) {
-            std::cout << "Edge " << i << ": from(" << from_pos.x << "," << from_pos.y 
-                     << ") to(" << to_pos.x << "," << to_pos.y << ")" << std::endl;
-        }
+        // Calculate depth for fog
+        Vector3 edge_center = (from_node.position + to_node.position) * 0.5f;
+        Vector3 relative_pos = edge_center - camera_position;
+        Vector3 forward = (camera_target - camera_position).normalize();
+        float depth = relative_pos.x * forward.x + relative_pos.y * forward.y + relative_pos.z * forward.z;
         
-        // Make edges highly visible for debugging
-        sf::Color edge_color = sf::Color::Red; // Bright red for visibility
+        // Base edge color with transparency based on depth
+        sf::Color edge_color(150, 150, 200, 180);
         
-        // Simple single line for now
+        // Apply depth shading
+        float shade = calculate_depth_shade(depth);
+        edge_color.r *= shade;
+        edge_color.g *= shade;
+        edge_color.b *= shade;
+        
+        // Apply fog
+        edge_color = apply_fog(edge_color, depth);
+        
+        // Create edge vertices
         sf::Vertex v1, v2;
         v1.position = from_pos;
         v1.color = edge_color;
@@ -261,7 +736,7 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         window.draw(edge_vertices.data(), edge_vertices.size(), sf::PrimitiveType::Lines);
     }
     
-    // Draw nodes with 3D perspective and depth-based sizing
+    // Draw nodes with 3D perspective, lighting, and depth-based sizing
     for (uint32_t i = 0; i < graph.node_count; i++) {
         const GraphNode& node = graph.nodes[i];
         if (!node.visible) continue;
@@ -274,20 +749,50 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         float depth = relative_pos.x * forward.x + relative_pos.y * forward.y + relative_pos.z * forward.z;
         
         float perspective_scale = apply_perspective(depth);
-        float visual_radius = node.radius * perspective_scale * 0.5f; // Scale down for better visibility
-        visual_radius = std::max(2.0f, std::min(visual_radius, 50.0f)); // Clamp radius
+        float visual_radius = node.radius * perspective_scale * 0.5f;
+        visual_radius = std::max(2.0f, std::min(visual_radius, 50.0f));
         
+        // Calculate node normal (facing camera)
+        Vector3 normal = (camera_position - node.position).normalize();
+        
+        // Apply lighting to node color
+        sf::Color lit_color = apply_lighting(node.position, normal, 
+            sf::Color(node.color.r, node.color.g, node.color.b, node.color.a));
+        
+        // Apply fog based on depth
+        lit_color = apply_fog(lit_color, depth);
+        
+        // Create gradient effect for 3D appearance
         sf::CircleShape circle(visual_radius);
-        circle.setFillColor(sf::Color(node.color.r, node.color.g, node.color.b, node.color.a));
-        circle.setOutlineThickness(1.0f);
-        circle.setOutlineColor(sf::Color::White);
+        circle.setFillColor(lit_color);
+        
+        // Depth-based outline
+        float outline_alpha = std::max(50.0f, 255.0f * (1.0f - depth / 50.0f));
+        circle.setOutlineThickness(std::max(0.5f, 2.0f - depth / 25.0f));
+        circle.setOutlineColor(sf::Color(255, 255, 255, outline_alpha));
+        
         circle.setPosition(sf::Vector2f(screen_pos.x - circle.getRadius(), screen_pos.y - circle.getRadius()));
         
         window.draw(circle);
     }
     
-    // Draw overlay if provided
-    if (!overlay.is_empty()) {
+    // Draw help overlay if enabled
+    if (show_help) {
+        Pixels help_overlay = create_help_overlay();
+        sf::Texture help_texture = pixels_to_sfml_texture(help_overlay);
+        sf::Sprite help_sprite(help_texture);
+        
+        sf::View original_view = window.getView();
+        window.setView(window.getDefaultView());
+        
+        help_sprite.setPosition(sf::Vector2f(10, 10));
+        window.draw(help_sprite);
+        
+        window.setView(original_view);
+    }
+    
+    // Draw custom overlay if provided
+    else if (!overlay.is_empty()) {
         sf::Texture overlay_texture = pixels_to_sfml_texture(overlay);
         sf::Sprite overlay_sprite(overlay_texture);
         

@@ -1,0 +1,3 @@
+[submodule "swaptube"]
+	path = swaptube
+	url = https://github.com/2swap/swaptube.git

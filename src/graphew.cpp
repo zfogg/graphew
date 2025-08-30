@@ -139,6 +139,43 @@ int main(int argc, char* argv[]) {
         std::cerr << "Warning: No edges created - agents may not have changed inventory states\n";
     }
     
+    // Print enhanced camera and lighting controls
+    std::cout << "\n╔══════════════════════════════════════════════════════════════╗\n";
+    std::cout << "║              ENHANCED CAMERA & LIGHTING CONTROLS              ║\n";
+    std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
+    std::cout << "║ CAMERA MOVEMENT:                                              ║\n";
+    std::cout << "║   W/S         - Move forward/backward                         ║\n";
+    std::cout << "║   A/D         - Move left/right                               ║\n";
+    std::cout << "║   Q/E         - Move up/down                                  ║\n";
+    std::cout << "║   Arrow Keys  - Rotate camera                                 ║\n";
+    std::cout << "║   Mouse Wheel - Zoom in/out                                   ║\n";
+    std::cout << "║   Right Drag  - Rotate camera view                            ║\n";
+    std::cout << "║   Left Drag   - Pan view                                      ║\n";
+    std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
+    std::cout << "║ ADVANCED CAMERA:                                              ║\n";
+    std::cout << "║   Shift+Wheel - Adjust field of view (FOV)                   ║\n";
+    std::cout << "║   Ctrl+Wheel  - Adjust camera movement speed                  ║\n";
+    std::cout << "║   0-9         - Load camera preset                            ║\n";
+    std::cout << "║   Ctrl+0-9    - Save current camera to preset                 ║\n";
+    std::cout << "║   R           - Reset camera to default                       ║\n";
+    std::cout << "║   Space       - Toggle auto-rotation                          ║\n";
+    std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
+    std::cout << "║ LIGHTING CONTROLS:                                            ║\n";
+    std::cout << "║   I/K         - Increase/decrease ambient light               ║\n";
+    std::cout << "║   L/J         - Increase/decrease directional light           ║\n";
+    std::cout << "║   Numpad 4/6  - Rotate light horizontally                     ║\n";
+    std::cout << "║   Numpad 8/2  - Rotate light vertically                       ║\n";
+    std::cout << "║   Shift+S     - Toggle shadows (when available)               ║\n";
+    std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
+    std::cout << "║ VISUAL EFFECTS:                                               ║\n";
+    std::cout << "║   F           - Toggle fog effect                             ║\n";
+    std::cout << "║   G           - Toggle grid display                           ║\n";
+    std::cout << "║   X           - Toggle axis indicators                        ║\n";
+    std::cout << "║   O           - Toggle info overlay                           ║\n";
+    std::cout << "║   H           - Show/hide this help overlay                   ║\n";
+    std::cout << "║   P           - Toggle physics simulation                     ║\n";
+    std::cout << "╚══════════════════════════════════════════════════════════════╝\n\n";
+    
     // Create info overlay showing current visualization mode
     Pixels info_overlay(400, 150);
     info_overlay.fill(TRANSPARENT_BLACK);
