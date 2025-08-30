@@ -108,6 +108,23 @@ bool ReplayParser::parse_json_data(const char* json_str, ReplayData& replay_data
     // Detect format type and parse inventory items list
     bool is_grid_objects_format = cJSON_GetObjectItem(json, "grid_objects") != nullptr;
     bool is_objects_format = cJSON_GetObjectItem(json, "objects") != nullptr;
+    bool is_pufferbox_format = false; // Pufferbox format with agent:inv: prefix
+    
+    // Check for pufferbox format by looking at inventory_items field (reliable method)
+    if (is_grid_objects_format) {
+        cJSON* inventory_items = cJSON_GetObjectItem(json, "inventory_items");
+        if (cJSON_IsArray(inventory_items) && cJSON_GetArraySize(inventory_items) > 0) {
+            cJSON* first_item = cJSON_GetArrayItem(inventory_items, 0);
+            if (cJSON_IsString(first_item)) {
+                std::string item_name = cJSON_GetStringValue(first_item);
+                // Pufferbox format uses dots (ore.red), regular format uses underscores (ore_red)
+                if (item_name.find('.') != std::string::npos) {
+                    is_pufferbox_format = true;
+                    std::cout << "Detected pufferbox format (dots in item names)" << std::endl;
+                }
+            }
+        }
+    }
     
     if (is_grid_objects_format) {
         // Parse grid_objects format (sample.json)
@@ -192,8 +209,11 @@ bool ReplayParser::parse_json_data(const char* json_str, ReplayData& replay_data
                     }
                 }
                 
+                std::cout << "Parsing agent " << agent.agent_id << " - format: " 
+                          << (is_pufferbox_format ? "pufferbox" : (is_objects_format ? "objects" : "grid_objects")) << std::endl;
+                
                 // Parse inventory data based on format
-                if (is_grid_objects_format) {
+                if (is_grid_objects_format && !is_pufferbox_format) {
                     // grid_objects format: "inv:item_name" arrays
                     for (const std::string& item : replay_data.inventory_items) {
                         std::string inv_key = "inv:" + item;
@@ -202,6 +222,24 @@ bool ReplayParser::parse_json_data(const char* json_str, ReplayData& replay_data
                             std::vector<TimestampValue> values;
                             parse_timestamp_array(inv_data, values);
                             agent.inventory_over_time[item] = values;
+                        }
+                    }
+                } else if (is_pufferbox_format) {
+                    // Pufferbox format with agent:inv: prefix and dots in names
+                    std::vector<std::string> agent_inv_items = {
+                        "ore.red", "ore.blue", "ore.green", 
+                        "battery", "heart", "armor", "laser", "blueprint"
+                    };
+                    for (const std::string& item : agent_inv_items) {
+                        std::string inv_key = "agent:inv:" + item;
+                        cJSON* inv_data = cJSON_GetObjectItem(obj, inv_key.c_str());
+                        if (inv_data && cJSON_IsArray(inv_data) && cJSON_GetArraySize(inv_data) > 0) {
+                            std::vector<TimestampValue> values;
+                            parse_timestamp_array(inv_data, values);
+                            // Convert dot notation to underscore for consistency
+                            std::string clean_item = item;
+                            std::replace(clean_item.begin(), clean_item.end(), '.', '_');
+                            agent.inventory_over_time[clean_item] = values;
                         }
                     }
                     
