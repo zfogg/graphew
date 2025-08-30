@@ -72,9 +72,24 @@ bool ForceLayoutEngine::apply_force_layout_step(Graph3D& graph, const PhysicsPar
     
     static std::vector<NodePhysics> physics_nodes;
     static bool initialized = false;
+    static uint32_t last_node_count = 0;
     
-    // Initialize on first call
-    if (!initialized || physics_nodes.size() != graph.node_count) {
+    // Initialize on first call OR when graph changes OR when nodes have been reset
+    bool nodes_were_reset = false;
+    if (initialized && physics_nodes.size() == graph.node_count) {
+        // Check if node positions have been externally reset (indicating 'R' key press)
+        for (uint32_t i = 0; i < std::min(3u, graph.node_count); i++) {
+            float pos_diff = std::abs(physics_nodes[i].position.x - graph.nodes[i].position.x) +
+                           std::abs(physics_nodes[i].position.y - graph.nodes[i].position.y) +
+                           std::abs(physics_nodes[i].position.z - graph.nodes[i].position.z);
+            if (pos_diff > 5.0f) { // Large position change indicates reset
+                nodes_were_reset = true;
+                break;
+            }
+        }
+    }
+    
+    if (!initialized || physics_nodes.size() != graph.node_count || nodes_were_reset) {
         physics_nodes.resize(graph.node_count);
         
         for (uint32_t i = 0; i < graph.node_count; i++) {

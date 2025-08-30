@@ -22,13 +22,20 @@ SOURCES = $(LIB_SOURCES) $(MAIN_SOURCES)
 
 all: $(TARGETS)
 
-$(BUILD_DIR)/%.o: $(LIB_DIR)/%.cpp $(HEADERS)
+# Compile library sources (only rebuild if source or its dependencies changed)
+$(BUILD_DIR)/%.o: $(LIB_DIR)/%.cpp
+	@echo "Compiling $<..."
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -MMD -MP -c $< -o $@
 
-$(BIN_DIR)/%: $(SRC_DIR)/%.cpp $(HEADERS) $(LIB_OBJECTS)
+# Link final executables (only rebuild if objects or main source changed)
+$(BIN_DIR)/%: $(SRC_DIR)/%.cpp $(LIB_OBJECTS)
+	@echo "Linking $@..."
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $< $(LIB_OBJECTS) $(LDFLAGS) -o $@
+
+# Include dependency files for accurate rebuilding
+-include $(LIB_OBJECTS:.o=.d)
 
 install-deps:
 	@echo "Installing dependencies..."

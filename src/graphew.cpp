@@ -9,32 +9,23 @@
 #include "force_layout.hpp"
 
 void print_replay_info(const ReplayData& replay) {
-    std::cout << "\n=== Replay Analysis ===" << std::endl;
-    std::cout << "Agents: " << replay.agents.size() << std::endl;
-    std::cout << "Max timestep: " << replay.max_timestep << std::endl;
-    std::cout << "Inventory items: ";
-    for (const auto& item : replay.inventory_items) {
-        std::cout << item << " ";
-    }
-    std::cout << "\n";
-    
+    // Print enhanced camera and lighting controls
     // Show sample agent data
     if (!replay.agents.empty()) {
         const auto& sample_agent = replay.agents[0];
         std::cout << "Sample agent " << sample_agent.agent_id << " inventory:" << std::endl;
         for (const auto& [item, values] : sample_agent.inventory_over_time) {
             if (!values.empty()) {
-                std::cout << "  " << item << ": " << values.front().value 
+                std::cout << "  " << item << ": " << values.front().value
                          << " -> " << values.back().value << std::endl;
             }
         }
-        
+
         if (!sample_agent.total_reward_over_time.empty()) {
             std::cout << "  Total reward: " << sample_agent.total_reward_over_time.front().value
                      << " -> " << sample_agent.total_reward_over_time.back().value << std::endl;
         }
     }
-    std::cout << "========================\n" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -44,49 +35,87 @@ int main(int argc, char* argv[]) {
         print_usage(argv[0]);
         return EXIT_FAILURE;
     }
-    
+
     if (args.help) {
         print_usage(argv[0]);
         cleanup_args(&args);
         return EXIT_SUCCESS;
     }
-    
+
     if (args.version) {
         print_version();
         cleanup_args(&args);
         return EXIT_SUCCESS;
     }
-    
+
     auto graph3d = std::make_unique<Graph3D>();
     auto renderer = std::make_unique<GraphRenderer>();
-    
+
     renderer->init_window("Graphew - AI Agent Inventory & Reward Visualization");
-    
+
     ReplayData replay;
-    
+    std::vector<Vector3> initial_positions; // Declare at function scope for R key access
+
     if (args.input_file) {
-        std::cout << "Loading replay from " << (args.compressed ? "compressed " : "") 
+        std::cout << "Loading replay from " << (args.compressed ? "compressed " : "")
                   << "file: " << args.input_file << std::endl;
-        
+
         bool loaded = false;
         if (args.compressed) {
             loaded = ReplayParser::parse_compressed_replay_file(args.input_file, replay);
         } else {
             loaded = ReplayParser::parse_replay_file(args.input_file, replay);
         }
-        
+
         if (!loaded) {
             std::cerr << "Failed to load replay file\n";
             cleanup_args(&args);
             return EXIT_FAILURE;
         }
-        
+
+        std::cout << "\n╔══════════════════════════════════════════════════════════════╗\n";
+        std::cout << "║              ENHANCED CAMERA & LIGHTING CONTROLS              ║\n";
+        std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
+        std::cout << "║ CAMERA MOVEMENT:                                              ║\n";
+        std::cout << "║   W/S         - Move forward/backward                         ║\n";
+        std::cout << "║   A/D         - Move left/right                               ║\n";
+        std::cout << "║   Q/E         - Move up/down                                  ║\n";
+        std::cout << "║   Arrow Keys  - Rotate camera                                 ║\n";
+        std::cout << "║   Mouse Wheel - Zoom in/out                                   ║\n";
+        std::cout << "║   Right Drag  - Rotate camera view                            ║\n";
+        std::cout << "║   Left Drag   - Pan view                                      ║\n";
+        std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
+        std::cout << "║ ADVANCED CAMERA:                                              ║\n";
+        std::cout << "║   Shift+Wheel - Adjust field of view (FOV)                   ║\n";
+        std::cout << "║   Ctrl+Wheel  - Adjust camera movement speed                  ║\n";
+        std::cout << "║   0-9         - Load camera preset                            ║\n";
+        std::cout << "║   Ctrl+0-9    - Save current camera to preset                 ║\n";
+        std::cout << "║   R           - Reset camera to default                       ║\n";
+        std::cout << "║   Space       - Toggle auto-rotation                          ║\n";
+        std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
+        std::cout << "║ LIGHTING CONTROLS:                                            ║\n";
+        std::cout << "║   I/K         - Increase/decrease ambient light               ║\n";
+        std::cout << "║   L/J         - Increase/decrease directional light           ║\n";
+        std::cout << "║   Numpad 4/6  - Rotate light horizontally                     ║\n";
+        std::cout << "║   Numpad 8/2  - Rotate light vertically                       ║\n";
+        std::cout << "║   Shift+S     - Toggle shadows (when available)               ║\n";
+        std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
+        std::cout << "║ VISUAL EFFECTS:                                               ║\n";
+        std::cout << "║   F           - Toggle fog effect                             ║\n";
+        std::cout << "║   G           - Toggle grid display                           ║\n";
+        std::cout << "║   X           - Toggle axis indicators                        ║\n";
+        std::cout << "║   O           - Toggle info overlay                           ║\n";
+        std::cout << "║   H           - Show/hide this help overlay                   ║\n";
+        std::cout << "║   P           - Toggle physics simulation                     ║\n";
+        std::cout << "╚══════════════════════════════════════════════════════════════╝\n\n";
+
+
         print_replay_info(replay);
-        
+
         // Find inventory items that agents actually collected
         std::vector<std::string> inventory_dims;
         std::vector<std::string> active_items;
-        
+
         // Check which items have actual timestep data (not just non-zero values)
         for (const std::string& item : replay.inventory_items) {
             bool has_timestep_data = false;
@@ -104,7 +133,7 @@ int main(int argc, char* argv[]) {
                 std::cout << "Skipping item with no data: " << item << std::endl;
             }
         }
-        
+
         // Use active items or fallback to first available items
         if (active_items.size() >= 3) {
             inventory_dims = {active_items[0], active_items[1], active_items[2]};
@@ -113,19 +142,31 @@ int main(int argc, char* argv[]) {
         } else {
             inventory_dims = {"ore_red", "battery_red", "time"}; // fallback with time
         }
-        
-        
+
+
         AgentGraphBuilder::build_inventory_dimensional_graph(replay, *graph3d, inventory_dims);
-        
+
+        // Store initial positions IMMEDIATELY after graph building for 'R' key reset
+        for (uint32_t i = 0; i < graph3d->node_count; i++) {
+            initial_positions.push_back(graph3d->nodes[i].position);
+        }
+        std::cout << "Stored " << initial_positions.size() << " initial positions for reset functionality" << std::endl;
+
+        // DEBUG: Print first few initial positions to see what we're storing
+        for (uint32_t i = 0; i < std::min(3u, (uint32_t)initial_positions.size()); i++) {
+            std::cout << "  Initial pos " << i << ": (" << initial_positions[i].x
+                      << "," << initial_positions[i].y << "," << initial_positions[i].z << ")" << std::endl;
+        }
+
     } else {
         std::cerr << "No replay file provided. Use -f to specify a replay file.\n";
         std::cerr << "Example: ./bin/graphew -f sample.json\n";
         cleanup_args(&args);
         return EXIT_FAILURE;
     }
-    
+
     std::cout << "Graph built: " << graph3d->node_count << " nodes, " << graph3d->edge_count << " edges\n";
-    
+
     // Validate that we have data to render
     if (graph3d->node_count == 0) {
         std::cerr << "Error: No graph nodes created from replay data.\n";
@@ -136,97 +177,46 @@ int main(int argc, char* argv[]) {
         cleanup_args(&args);
         return EXIT_FAILURE;
     }
-    
+
     if (graph3d->edge_count == 0) {
         std::cerr << "Warning: No edges created - agents may not have changed inventory states\n";
     }
-    
+
     // DON'T center graph - use original positions and point camera at their geometric center
     Vector3 min_bounds, max_bounds;
     renderer->calculate_graph_bounds(*graph3d, min_bounds, max_bounds);
-    
-    // Calculate diagonal size to determine appropriate camera distance
-    Vector3 size = max_bounds - min_bounds;
-    float diagonal = std::sqrt(size.x * size.x + size.y * size.y + size.z * size.z);
-    
+
     // SYNC WITH FORCE LAYOUT: Camera target matches where force layout centers nodes
+
     Vector3 actual_graph_center(0, 0, 0); // Match the force layout target center
-    
-    // Calculate scale needed to fit entire graph in view
-    float max_graph_dimension = std::max({size.x, size.y, size.z});
-    float required_scale = std::min(1920.0f / max_graph_dimension, 1080.0f / max_graph_dimension) * 0.8f; // 80% of screen
-    
-    std::cout << "SYNCHRONIZED CENTERING:" << std::endl;
-    std::cout << "  Graph size: (" << size.x << "," << size.y << "," << size.z << ")" << std::endl;
-    std::cout << "  Camera target: (" << actual_graph_center.x << "," << actual_graph_center.y << "," << actual_graph_center.z << ")" << std::endl;
-    std::cout << "  Force layout centers around: (0, 0, 0)" << std::endl;
-    std::cout << "  Max graph dimension: " << max_graph_dimension << std::endl;
-    
+
     auto renderer_ptr = renderer.get();
     renderer_ptr->camera_target = actual_graph_center; // Look at visual center for perfect centering
     renderer_ptr->camera_distance = 100.0f; // Standard distance
-    
-    // Set reasonable camera angles  
+
+    // Set reasonable camera angles
     renderer_ptr->camera_angle_v = 0.3f; // Look down slightly
     renderer_ptr->camera_angle_h = 0.5f; // Angle for 3D view
     renderer_ptr->update_camera_position();
-    
-    std::cout << "Camera set - target: (" << renderer_ptr->camera_target.x << "," << renderer_ptr->camera_target.y << "," << renderer_ptr->camera_target.z << ")" << std::endl;
-    std::cout << "Graph bounds: (" << min_bounds.x << "," << min_bounds.y << "," << min_bounds.z << ") to (" << max_bounds.x << "," << max_bounds.y << "," << max_bounds.z << ")" << std::endl;
-    
-    // Print enhanced camera and lighting controls
-    std::cout << "\n╔══════════════════════════════════════════════════════════════╗\n";
-    std::cout << "║              ENHANCED CAMERA & LIGHTING CONTROLS              ║\n";
-    std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
-    std::cout << "║ CAMERA MOVEMENT:                                              ║\n";
-    std::cout << "║   W/S         - Move forward/backward                         ║\n";
-    std::cout << "║   A/D         - Move left/right                               ║\n";
-    std::cout << "║   Q/E         - Move up/down                                  ║\n";
-    std::cout << "║   Arrow Keys  - Rotate camera                                 ║\n";
-    std::cout << "║   Mouse Wheel - Zoom in/out                                   ║\n";
-    std::cout << "║   Right Drag  - Rotate camera view                            ║\n";
-    std::cout << "║   Left Drag   - Pan view                                      ║\n";
-    std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
-    std::cout << "║ ADVANCED CAMERA:                                              ║\n";
-    std::cout << "║   Shift+Wheel - Adjust field of view (FOV)                   ║\n";
-    std::cout << "║   Ctrl+Wheel  - Adjust camera movement speed                  ║\n";
-    std::cout << "║   0-9         - Load camera preset                            ║\n";
-    std::cout << "║   Ctrl+0-9    - Save current camera to preset                 ║\n";
-    std::cout << "║   R           - Reset camera to default                       ║\n";
-    std::cout << "║   Space       - Toggle auto-rotation                          ║\n";
-    std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
-    std::cout << "║ LIGHTING CONTROLS:                                            ║\n";
-    std::cout << "║   I/K         - Increase/decrease ambient light               ║\n";
-    std::cout << "║   L/J         - Increase/decrease directional light           ║\n";
-    std::cout << "║   Numpad 4/6  - Rotate light horizontally                     ║\n";
-    std::cout << "║   Numpad 8/2  - Rotate light vertically                       ║\n";
-    std::cout << "║   Shift+S     - Toggle shadows (when available)               ║\n";
-    std::cout << "╠══════════════════════════════════════════════════════════════╣\n";
-    std::cout << "║ VISUAL EFFECTS:                                               ║\n";
-    std::cout << "║   F           - Toggle fog effect                             ║\n";
-    std::cout << "║   G           - Toggle grid display                           ║\n";
-    std::cout << "║   X           - Toggle axis indicators                        ║\n";
-    std::cout << "║   O           - Toggle info overlay                           ║\n";
-    std::cout << "║   H           - Show/hide this help overlay                   ║\n";
-    std::cout << "║   P           - Toggle physics simulation                     ║\n";
-    std::cout << "╚══════════════════════════════════════════════════════════════╝\n\n";
-    
+
+    // Initial positions already stored right after graph building
+
     // Create info overlay showing current visualization mode
     Pixels info_overlay(400, 150);
     info_overlay.fill(TRANSPARENT_BLACK);
     info_overlay.fill_rect(5, 5, 390, 25, argb(150, 20, 20, 100));
     info_overlay.bresenham_line(5, 35, 395, 35, argb(255, 255, 255, 200), 1.0f, 1);
-    
+
     // Add some visual indicators
     info_overlay.fill_circle(50, 70, 15, argb(200, 255, 100, 100)); // Green for high reward
     info_overlay.fill_circle(150, 70, 12, argb(200, 255, 255, 100)); // Yellow for medium
     info_overlay.fill_circle(250, 70, 8, argb(200, 255, 100, 100));  // Red for low
-    
+
     sf::Clock clock;
     bool physics_enabled = true;
     bool show_overlay = true;
     bool force_layout_running = true; // continuous by default
-    
+
     // Setup force layout parameters for real-time simulation
     ForceLayoutEngine::PhysicsParams layout_params;
     layout_params.repel = 5.0f;
@@ -244,17 +234,27 @@ int main(int argc, char* argv[]) {
     renderer->add_slider("Dimension", &layout_params.dimension, 1.0f, 3.0f);
     float render_dim = 3.0f;
     renderer->add_slider("RenderDim", &render_dim, 1.0f, 3.0f);
-    
-    // Continuous force layout (toggle with 'T')
-    int layout_iterations_remaining = layout_params.iterations;
-    
+
+    // Reset pause countdown and key state tracking (declared at loop scope)
+    int reset_pause_frames = 0;
+    bool r_key_was_pressed = false;
+
     while (!renderer->should_close()) {
         float delta_time = clock.restart().asSeconds();
-        
+
         renderer->update_camera();
         // Sync render dimension from slider
         renderer->set_render_dimension(render_dim);
-        
+
+        // Handle reset pause countdown first
+        if (reset_pause_frames > 0) {
+            reset_pause_frames--;
+            if (reset_pause_frames == 0 && physics_enabled) {
+                force_layout_running = true;
+                std::cout << "Force layout restarting after pause" << std::endl;
+            }
+        }
+
         // Controls
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::P)) {
             static sf::Clock key_timer;
@@ -264,7 +264,7 @@ int main(int argc, char* argv[]) {
                 key_timer.restart();
             }
         }
-        
+
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::O)) {
             static sf::Clock key_timer;
             if (key_timer.getElapsedTime().asSeconds() > 0.5f) {
@@ -273,7 +273,7 @@ int main(int argc, char* argv[]) {
                 key_timer.restart();
             }
         }
-        
+
         // Toggle continuous force layout with 'T'
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::T)) {
             static sf::Clock key_timer;
@@ -283,20 +283,55 @@ int main(int argc, char* argv[]) {
                 key_timer.restart();
             }
         }
-        
+
+        // R key resets graph to initial layout (no timer - works immediately)
+        static bool r_key_was_pressed = false;
+        bool r_key_is_pressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R);
+        // Only trigger on key press (not while held down)
+        if (r_key_is_pressed && !r_key_was_pressed) {
+            std::cout << "Resetting graph to initial layout..." << std::endl;
+
+            // Restore initial positions before any force layout
+            std::cout << "Restoring " << initial_positions.size() << " positions..." << std::endl;
+            for (uint32_t i = 0; i < graph3d->node_count && i < initial_positions.size(); i++) {
+                Vector3 old_pos = graph3d->nodes[i].position;
+                graph3d->nodes[i].position = initial_positions[i];
+                graph3d->nodes[i].velocity = Vector3(0, 0, 0); // Reset velocities
+                graph3d->nodes[i].force = Vector3(0, 0, 0);    // Reset forces
+
+                if (i < 3) {
+                    std::cout << "  Node " << i << ": (" << old_pos.x << "," << old_pos.y << "," << old_pos.z
+                                << ") -> (" << initial_positions[i].x << "," << initial_positions[i].y << "," << initial_positions[i].z << ")" << std::endl;
+                }
+            }
+
+            // Pause force layout briefly so you can see the reset visually
+            force_layout_running = false;
+            physics_enabled = true; // Ensure physics is enabled for later restart
+
+            // Set the loop variable to pause force layout
+            reset_pause_frames = 5; // Pause for 60 frames (~1 second at 60fps)
+
+            std::cout << "Force layout paused - will restart in 1 second" << std::endl;
+
+        }
+
+        // Update key state for next frame (MUST be outside the if block)
+        r_key_was_pressed = r_key_is_pressed;
+
         // Apply force layout in real-time if running
         if (force_layout_running) {
             int dummy_remaining = layout_params.iterations; // large number, decremented internally but ignored
             ForceLayoutEngine::apply_force_layout_step(*graph3d, layout_params, dummy_remaining);
-            
+
             // DON'T override camera target - let the user control it
         }
-        
+
         // Regular gentle physics for fine-tuning
         if (physics_enabled && !force_layout_running) {
             graph3d->update_physics(delta_time * 0.02f);
         }
-        
+
         if (show_overlay) {
             renderer->render_frame(*graph3d, info_overlay);
         } else {
@@ -304,7 +339,7 @@ int main(int argc, char* argv[]) {
             renderer->render_frame(*graph3d, empty);
         }
     }
-    
+
     cleanup_args(&args);
     return EXIT_SUCCESS;
 }
