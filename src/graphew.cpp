@@ -1,12 +1,15 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <sstream>
+#include <set>
 #include "graph.hpp"
 #include "renderer.hpp"
 #include "options.hpp"
 #include "swaptube_pixels.hpp"
 #include "replay_parser.hpp"
 #include "force_layout.hpp"
+#include "inventory_filter.hpp"
 
 void print_replay_info(const ReplayData& replay) {
     std::cout << "\n=== Replay Analysis ===" << std::endl;
@@ -63,6 +66,9 @@ int main(int argc, char* argv[]) {
     renderer->init_window("Graphew - AI Agent Inventory & Reward Visualization");
     
     ReplayData replay;
+    std::vector<InventoryState> inventory_states;  // Keep states for rebuilding
+    std::map<std::string, bool> item_tracking;     // Keep tracking state
+    std::set<std::string> tracked_items;           // Current tracked items
     
     if (args.input_file) {
         std::cout << "Loading replay from " << (args.compressed ? "compressed " : "") 
@@ -83,34 +89,147 @@ int main(int argc, char* argv[]) {
         
         print_replay_info(replay);
         
-        // Find inventory items that agents actually collected
-        std::vector<std::string> inventory_dims;
-        std::vector<std::string> active_items;
-        
-        // Check which items have non-zero values across agents
-        for (const std::string& item : replay.inventory_items) {
-            bool has_values = false;
-            for (const auto& agent : replay.agents) {
-                auto it = agent.inventory_over_time.find(item);
-                if (it != agent.inventory_over_time.end() && !it->second.empty() && it->second.back().value > 0) {
-                    has_values = true;
-                    break;
+        // Check if we should use inventory filtering mode
+        if (args.inventory_mode) {
+            std::cout << "\nUsing inventory transition graph mode\n";
+            
+            // Initialize checkboxes for each available item
+            for (const auto& item : replay.inventory_items) {
+                item_tracking[item] = false;  // Start with all unchecked
+            }
+            
+            // Parse filter items if provided via command line
+            if (args.filter_items) {
+                std::stringstream ss(args.filter_items);
+                std::string item;
+                while (std::getline(ss, item, ',')) {
+                    tracked_items.insert(item);
+                    if (item_tracking.find(item) != item_tracking.end()) {
+                        item_tracking[item] = true;  // Check the box for this item
+                    }
+                    std::cout << "  Tracking: " << item << "\n";
+                }
+            } else {
+                // If no items specified, track all by default
+                for (auto& [item, track] : item_tracking) {
+                    track = true;
+                    tracked_items.insert(item);
                 }
             }
-            if (has_values) active_items.push_back(item);
-        }
-        
-        // Use active items or fallback to first available items
-        if (active_items.size() >= 3) {
-            inventory_dims = {active_items[0], active_items[1], active_items[2]};
-        } else if (active_items.size() >= 2) {
-            inventory_dims = {active_items[0], active_items[1], "time"}; // Use time as Z dimension
+            
+            // Add checkboxes to the UI
+            renderer->clear_checkboxes();
+            for (auto& [item, track] : item_tracking) {
+                renderer->add_checkbox(item, &track);
+            }
+            
+            // Build inventory states from replay (store in outer scope for rebuilding)
+            inventory_states.clear();
+            
+            // For each agent, collect all timesteps where inventory changed
+            for (const auto& agent : replay.agents) {
+                std::set<int> timesteps;
+                
+                // Collect all unique timesteps for this agent
+                for (const auto& [item, values] : agent.inventory_over_time) {
+                    // Skip if filtering and item not tracked
+                    if (!tracked_items.empty() && tracked_items.find(item) == tracked_items.end()) {
+                        continue;
+                    }
+                    for (const auto& tv : values) {
+                        if (args.min_timestep >= 0 && tv.timestep < args.min_timestep) continue;
+                        if (args.max_timestep >= 0 && tv.timestep > args.max_timestep) continue;
+                        timesteps.insert(tv.timestep);
+                    }
+                }
+                
+                // Create complete inventory states for each timestep
+                for (int timestep : timesteps) {
+                    InventoryState state;
+                    state.timestep = timestep;
+                    state.agent_id = agent.agent_id;
+                    
+                    // Fill in all tracked items at this timestep
+                    for (const auto& [item, values] : agent.inventory_over_time) {
+                        // Skip if filtering and item not tracked
+                        if (!tracked_items.empty() && tracked_items.find(item) == tracked_items.end()) {
+                            continue;
+                        }
+                        
+                        // Find value at this timestep (or most recent before it)
+                        int value = 0;
+                        for (const auto& tv : values) {
+                            if (tv.timestep <= timestep) {
+                                value = static_cast<int>(tv.value);
+                            } else {
+                                break;
+                            }
+                        }
+                        
+                        if (value > 0 || tracked_items.empty()) {  // Include zero values if tracking all
+                            state.items[item] = value;
+                        }
+                    }
+                    
+                    // Only add state if it has any items
+                    if (!state.items.empty()) {
+                        inventory_states.push_back(state);
+                    }
+                }
+            }
+            
+            // Sort states by agent and timestep for proper transition creation
+            std::sort(inventory_states.begin(), inventory_states.end(), [](const InventoryState& a, const InventoryState& b) {
+                if (a.agent_id != b.agent_id) return a.agent_id < b.agent_id;
+                return a.timestep < b.timestep;
+            });
+            
+            std::cout << "  Created " << inventory_states.size() << " inventory observations\n";
+            
+            // Configure the filter
+            InventoryFilterConfig config;
+            config.tracked_items = tracked_items;
+            config.color_by_total = args.color_by_total;
+            config.size_by_frequency = args.size_by_freq;
+            config.min_timestep = args.min_timestep;
+            config.max_timestep = args.max_timestep;
+            config.separate_by_agent = false;  // Aggregate across all agents
+            config.only_changes = true;  // Only show transitions that change inventory
+            config.layout_mode = InventoryFilterConfig::FORCE_DIRECTED;
+            
+            // Create the transition graph
+            InventoryFilter::create_transition_graph(*graph3d, inventory_states, config);
+            
         } else {
-            inventory_dims = {"ore_red", "battery_red", "time"}; // fallback with time
+            // Use the original dimensional graph builder
+            // Find inventory items that agents actually collected
+            std::vector<std::string> inventory_dims;
+            std::vector<std::string> active_items;
+            
+            // Check which items have non-zero values across agents
+            for (const std::string& item : replay.inventory_items) {
+                bool has_values = false;
+                for (const auto& agent : replay.agents) {
+                    auto it = agent.inventory_over_time.find(item);
+                    if (it != agent.inventory_over_time.end() && !it->second.empty() && it->second.back().value > 0) {
+                        has_values = true;
+                        break;
+                    }
+                }
+                if (has_values) active_items.push_back(item);
+            }
+            
+            // Use active items or fallback to first available items
+            if (active_items.size() >= 3) {
+                inventory_dims = {active_items[0], active_items[1], active_items[2]};
+            } else if (active_items.size() >= 2) {
+                inventory_dims = {active_items[0], active_items[1], "time"}; // Use time as Z dimension
+            } else {
+                inventory_dims = {"ore_red", "battery_red", "time"}; // fallback with time
+            }
+            
+            AgentGraphBuilder::build_inventory_dimensional_graph(replay, *graph3d, inventory_dims);
         }
-        
-        
-        AgentGraphBuilder::build_inventory_dimensional_graph(replay, *graph3d, inventory_dims);
         
     } else {
         std::cerr << "No replay file provided. Use -f to specify a replay file.\n";
@@ -219,12 +338,65 @@ int main(int argc, char* argv[]) {
     // Continuous force layout (toggle with 'T')
     int layout_iterations_remaining = layout_params.iterations;
     
+    bool needs_rebuild = false;
+    std::set<std::string> last_tracked_items = tracked_items;
+    
     while (!renderer->should_close()) {
         float delta_time = clock.restart().asSeconds();
         
         renderer->update_camera();
         // Sync render dimension from slider
         renderer->set_render_dimension(render_dim);
+        
+        // Check if item tracking changed (only in inventory mode)
+        if (args.inventory_mode) {
+            std::set<std::string> current_tracked;
+            for (const auto& [item, track] : item_tracking) {
+                if (track) {
+                    current_tracked.insert(item);
+                }
+            }
+            
+            if (current_tracked != last_tracked_items) {
+                needs_rebuild = true;
+                last_tracked_items = current_tracked;
+                tracked_items = current_tracked;
+            }
+        }
+        
+        // Rebuild graph if needed
+        if (needs_rebuild && args.inventory_mode) {
+            needs_rebuild = false;
+            
+            std::cout << "\nRebuilding graph with items: ";
+            for (const auto& item : tracked_items) {
+                std::cout << item << " ";
+            }
+            std::cout << "\n";
+            
+            // Clear existing graph
+            graph3d = std::make_unique<Graph3D>();
+            
+            // Rebuild with new tracking
+            InventoryFilterConfig config;
+            config.tracked_items = tracked_items;
+            config.color_by_total = args.color_by_total;
+            config.size_by_frequency = args.size_by_freq;
+            config.min_timestep = args.min_timestep;
+            config.max_timestep = args.max_timestep;
+            config.separate_by_agent = false;
+            config.only_changes = true;
+            config.layout_mode = InventoryFilterConfig::FORCE_DIRECTED;
+            
+            InventoryFilter::create_transition_graph(*graph3d, inventory_states, config);
+            
+            std::cout << "Rebuilt: " << graph3d->node_count << " nodes, " 
+                     << graph3d->edge_count << " edges\n";
+                     
+            graph3d->center_graph();
+            Vector3 min_bounds, max_bounds;
+            renderer->calculate_graph_bounds(*graph3d, min_bounds, max_bounds);
+        }
         
         // Controls
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::P)) {

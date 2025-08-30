@@ -7,6 +7,14 @@ typedef struct {
     bool version;
     char* input_file;
     bool compressed;
+    
+    // Inventory filtering options
+    char* filter_items;     // Comma-separated list of items to track
+    bool inventory_mode;    // Enable inventory transition graph mode
+    bool color_by_total;    // Color nodes by total inventory
+    bool size_by_freq;      // Size nodes by frequency
+    int min_timestep;
+    int max_timestep;
 } CommandLineArgs;
 
 bool parse_command_line(int argc, char* argv[], CommandLineArgs* args);

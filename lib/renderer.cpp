@@ -61,10 +61,29 @@ void GraphRenderer::layout_ui_sliders() {
 }
 
 bool GraphRenderer::is_mouse_over_ui(const sf::Vector2f& mps) const {
+    // Check slider panel
     float panel_w = slider_track_width + slider_panel_padding * 2.0f;
     float panel_h = slider_panel_padding * 2.0f + 22.0f + static_cast<float>(ui_sliders.size()) * slider_vertical_spacing;
-    return mps.x >= slider_panel_x && mps.x <= slider_panel_x + panel_w &&
-           mps.y >= slider_panel_y && mps.y <= slider_panel_y + panel_h;
+    bool over_sliders = mps.x >= slider_panel_x && mps.x <= slider_panel_x + panel_w &&
+                       mps.y >= slider_panel_y && mps.y <= slider_panel_y + panel_h;
+    
+    // Check checkbox panel
+    if (!ui_checkboxes.empty()) {
+        sf::Vector2u window_size = window.getSize();
+        float checkbox_panel_width = 250.0f;
+        float checkbox_panel_height = ui_checkboxes.size() * 25.0f + 40.0f;
+        float checkbox_panel_x = window_size.x - checkbox_panel_width - 10.0f;
+        float checkbox_panel_y = 10.0f;
+        
+        bool over_checkboxes = mps.x >= checkbox_panel_x &&
+                              mps.x <= checkbox_panel_x + checkbox_panel_width &&
+                              mps.y >= checkbox_panel_y &&
+                              mps.y <= checkbox_panel_y + checkbox_panel_height;
+        
+        return over_sliders || over_checkboxes;
+    }
+    
+    return over_sliders;
 }
 
 void GraphRenderer::handle_ui_event(const sf::Event& ev) {
@@ -161,6 +180,7 @@ void GraphRenderer::handle_events() {
         }
         else if (auto* ev = event->getIf<sf::Event::MouseButtonPressed>()) {
             handle_ui_event(*event);
+            handle_checkbox_event(*event);
         }
         else if (auto* ev = event->getIf<sf::Event::MouseButtonReleased>()) {
             handle_ui_event(*event);
@@ -174,6 +194,9 @@ void GraphRenderer::handle_events() {
             view.setSize(sf::Vector2f(static_cast<float>(sz.x) / zoom_level,
                                        static_cast<float>(sz.y) / zoom_level));
             window.setView(view);
+            
+            // Re-layout checkboxes for new window size
+            layout_ui_checkboxes();
         }
         else if (auto* mouseWheel = event->getIf<sf::Event::MouseWheelScrolled>()) {
             // Ignore when over UI
@@ -1056,10 +1079,11 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         window.setView(original_view);
     }
     
-    // Draw interactive UI (sliders)
+    // Draw interactive UI (sliders and checkboxes)
     draw_ui_sliders();
+    draw_ui_checkboxes();
 
-    // Draw help overlay last so it sits above sliders
+    // Draw help overlay last so it sits above everything
     if (show_help) {
         sf::View original_view2 = window.getView();
         window.setView(window.getDefaultView());
@@ -1118,4 +1142,129 @@ void update_sfml_texture_from_pixels(sf::Texture& texture, const Pixels& pixels)
     }
     
     texture.update(sfml_pixels.data());
+}
+
+// Checkbox implementation
+void GraphRenderer::clear_checkboxes() {
+    ui_checkboxes.clear();
+}
+
+void GraphRenderer::add_checkbox(const std::string& label, bool* target) {
+    UICheckbox checkbox;
+    checkbox.label = label;
+    checkbox.target = target;
+    checkbox.last_value = target ? *target : false;
+    ui_checkboxes.push_back(checkbox);
+    layout_ui_checkboxes();
+}
+
+void GraphRenderer::layout_ui_checkboxes() {
+    // Position checkboxes in top-right corner
+    sf::Vector2u window_size = window.getSize();
+    float panel_width = 250.0f;
+    float checkbox_x = window_size.x - panel_width + 20.0f;  // Right side with padding
+    float checkbox_y = 40.0f;  // Top with some margin
+    float checkbox_size = 18.0f;
+    float checkbox_spacing = 25.0f;
+    
+    for (size_t i = 0; i < ui_checkboxes.size(); i++) {
+        auto& cb = ui_checkboxes[i];
+        cb.rect_px.left = checkbox_x;
+        cb.rect_px.top = checkbox_y + i * checkbox_spacing;
+        cb.rect_px.width = checkbox_size;
+        cb.rect_px.height = checkbox_size;
+    }
+}
+
+void GraphRenderer::handle_checkbox_event(const sf::Event& ev) {
+    if (auto* pressed = ev.getIf<sf::Event::MouseButtonPressed>()) {
+        if (pressed->button == sf::Mouse::Button::Left) {
+            sf::Vector2f mouse_pos(static_cast<float>(pressed->position.x), 
+                                  static_cast<float>(pressed->position.y));
+            
+            for (auto& cb : ui_checkboxes) {
+                if (mouse_pos.x >= cb.rect_px.left && 
+                    mouse_pos.x <= cb.rect_px.left + cb.rect_px.width &&
+                    mouse_pos.y >= cb.rect_px.top && 
+                    mouse_pos.y <= cb.rect_px.top + cb.rect_px.height) {
+                    
+                    // Toggle the checkbox
+                    if (cb.target) {
+                        *cb.target = !(*cb.target);
+                        cb.last_value = *cb.target;
+                    }
+                    ui_mouse_captured = true;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void GraphRenderer::draw_ui_checkboxes() {
+    if (ui_checkboxes.empty() || !ui_font_loaded) return;
+    
+    // Position in top-right corner
+    sf::Vector2u window_size = window.getSize();
+    float panel_width = 250.0f;
+    float panel_height = ui_checkboxes.size() * 25.0f + 40.0f;
+    float panel_x = window_size.x - panel_width - 10.0f;
+    float panel_y = 10.0f;
+    
+    // Draw checkbox background panel
+    sf::RectangleShape panel(sf::Vector2f(panel_width, panel_height));
+    panel.setPosition(sf::Vector2f(panel_x, panel_y));
+    panel.setFillColor(sf::Color(30, 30, 40, 220));
+    panel.setOutlineColor(sf::Color(100, 100, 120, 255));
+    panel.setOutlineThickness(1.0f);
+    window.draw(panel);
+    
+    // Draw title
+    sf::Text title(ui_font);
+    title.setString("Track Items:");
+    title.setCharacterSize(14);
+    title.setFillColor(sf::Color(200, 200, 220));
+    title.setPosition(sf::Vector2f(panel_x + 10.0f, panel_y + 5.0f));
+    window.draw(title);
+    
+    // Draw each checkbox
+    for (const auto& cb : ui_checkboxes) {
+        // Draw checkbox box
+        sf::RectangleShape box(sf::Vector2f(cb.rect_px.width, cb.rect_px.height));
+        box.setPosition(sf::Vector2f(cb.rect_px.left, cb.rect_px.top));
+        box.setFillColor(sf::Color(50, 50, 60));
+        box.setOutlineColor(sf::Color(150, 150, 170));
+        box.setOutlineThickness(2.0f);
+        window.draw(box);
+        
+        // Draw checkmark if checked
+        if (cb.target && *cb.target) {
+            // Draw a simple checkmark using lines
+            sf::VertexArray checkmark(sf::PrimitiveType::Lines, 4);
+            float cx = cb.rect_px.left + cb.rect_px.width / 2;
+            float cy = cb.rect_px.top + cb.rect_px.height / 2;
+            
+            // First line of checkmark
+            checkmark[0].position = sf::Vector2f(cx - 6, cy);
+            checkmark[0].color = sf::Color(100, 255, 100);
+            checkmark[1].position = sf::Vector2f(cx - 2, cy + 4);
+            checkmark[1].color = sf::Color(100, 255, 100);
+            
+            // Second line of checkmark
+            checkmark[2].position = sf::Vector2f(cx - 2, cy + 4);
+            checkmark[2].color = sf::Color(100, 255, 100);
+            checkmark[3].position = sf::Vector2f(cx + 6, cy - 4);
+            checkmark[3].color = sf::Color(100, 255, 100);
+            
+            window.draw(checkmark);
+        }
+        
+        // Draw label
+        sf::Text label(ui_font);
+        label.setString(cb.label);
+        label.setCharacterSize(12);
+        label.setFillColor(sf::Color(220, 220, 240));
+        label.setPosition(sf::Vector2f(cb.rect_px.left + cb.rect_px.width + 10.0f, cb.rect_px.top + 2.0f));
+        window.draw(label);
+    }
 }

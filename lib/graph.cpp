@@ -6,6 +6,7 @@
 #include <cjson/cJSON.h>
 #include <iostream>
 #include <string>
+#include <algorithm>
 
 // Vector3 implementation
 float Vector3::length() const {
@@ -67,8 +68,19 @@ uint32_t Graph3D::add_node(const Vector3& position, const Color& color, float ra
     node->velocity = Vector3(0.0f, 0.0f, 0.0f);
     node->force = Vector3(0.0f, 0.0f, 0.0f);
     node->color = color;
+    node->original_color = color;  // Store original
     node->radius = radius;
+    node->original_radius = radius; // Store original
     node->visible = true;
+    
+    // Initialize metadata
+    node->type = "";
+    node->subtype = "";
+    node->properties.clear();
+    node->tags.clear();
+    node->agent_id = -1;
+    node->timestep = 0;
+    node->value = 0.0f;
     
     if (!label.empty()) {
         std::strncpy(node->label, label.c_str(), MAX_LABEL_LENGTH - 1);

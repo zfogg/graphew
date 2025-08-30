@@ -8,12 +8,13 @@ Graphew transforms AI agent replay data into interactive 3D visualizations that 
 
 ### Key Features
 
-- **Force-Directed Layouts**: Physics-based graph positioning
-- **Temporal State Transitions**: Edges represent agent inventory changes over time
-- **Multi-Agent Support**: All agents in environment contribute to the graph
+- **Force-Directed Layouts**: Physics-based graph positioning in abstract space
+- **Inventory State Graphs**: Nodes represent unique inventory combinations across all agents
+- **Temporal State Transitions**: Edges show how agents move between inventory states
+- **Multi-Agent Aggregation**: Combines all agent experiences into unified state space
 - **Reward Visualization**: Green (high reward) to Red (low reward) color-coded nodes
 - **Real-Time 3D Graphics**: SFML-powered interactive rendering with smooth camera controls
-- **Universal Format Support**: Handles both `.grid_objects` and `.objects` replay formats
+- **Advanced Filtering**: Track specific items or item combinations
 - **Compressed File Support**: Native zlib decompression for `.json.z` replay files
 
 ## Background: Klotski State Spaces
@@ -76,11 +77,11 @@ make debug         # Show build configuration
 ### Basic Usage
 
 ```bash
-# Visualize Metta AI agent replay data
-./bin/graphew -f replay.json
+# Standard visualization - shows agent trajectories in inventory space
+./bin/graphew -f replay.json.z
 
-# Support for compressed replays (recommended)
-./bin/graphew -f replay.json.z  
+# Inventory transition graph - nodes are unique inventory states
+./bin/graphew -f replay.json.z -i
 
 # Help and version info
 ./bin/graphew --help
@@ -89,19 +90,132 @@ make debug         # Show build configuration
 
 ### Command Line Options
 
+**Basic Options:**
 - `-f, --file FILE`: Load replay from JSON file (supports .json.z compression)
 - `-h, --help`: Show help message with usage examples
 - `-v, --version`: Display version information
 
+**Inventory Filtering Options:**
+- `-i, --inventory`: Create transition graph from inventory states (nodes = unique states)
+- `-I, --items LIST`: Track specific items only (comma-separated)
+- `-c, --color-total`: Color nodes by total inventory value
+- `-s, --size-freq`: Size nodes by state frequency
+- `-t, --timestep RANGE`: Limit to timestep range (e.g. '100:500')
+
+### Example Commands
+
+```bash
+# BASIC VISUALIZATIONS
+# Show all inventory state transitions
+./bin/graphew -f replay.json.z -i
+
+# Track only heart pickups (1D projection)
+./bin/graphew -f replay.json.z -i -I heart
+
+# Track hearts and red ore (2D relationships)
+./bin/graphew -f replay.json.z -i -I heart,ore_red
+
+# All ore types with color coding by total
+./bin/graphew -f replay.json.z -i -I ore_red,ore_blue,ore_green -c
+
+# ADVANCED FILTERING
+# Size nodes by how often states occur
+./bin/graphew -f replay.json.z -i -s
+
+# Focus on early game (first 500 timesteps)
+./bin/graphew -f replay.json.z -i -t 500
+
+# Mid-game analysis (timesteps 200-800)
+./bin/graphew -f replay.json.z -i -t 200:800
+
+# Combine filters: hearts only, sized by frequency, colored by total
+./bin/graphew -f replay.json.z -i -I heart -s -c
+
+# Track battery management strategies
+./bin/graphew -f replay.json.z -i -I battery_red,battery_blue,battery_green -s
+
+# Full inventory dynamics with all visual enhancements
+./bin/graphew -f replay.json.z -i -c -s
+```
+
 ### Interactive Controls
 
-- **Mouse Drag**: Rotate camera around graph
+**Camera Movement:**
+- **W/S**: Move forward/backward
+- **A/D**: Move left/right  
+- **Q/E**: Move up/down
+- **Arrow Keys**: Rotate camera
+- **Mouse Drag (Right)**: Rotate view
 - **Mouse Wheel**: Zoom in/out
-- **SPACE**: Toggle auto-rotation on/off
-- **R**: Reset camera to default position  
-- **P**: Toggle physics simulation
-- **O**: Toggle info overlay
+- **Shift+Wheel**: Adjust field of view
+- **Ctrl+Wheel**: Adjust movement speed
+
+**Camera Presets:**
+- **0-9**: Load camera preset
+- **Ctrl+0-9**: Save current camera to preset
+- **R**: Reset camera to default
+- **Space**: Toggle auto-rotation
+
+**Lighting & Effects:**
+- **I/K**: Adjust ambient light intensity
+- **L/J**: Adjust directional light intensity
+- **Numpad 4/6**: Rotate light horizontally
+- **Numpad 8/2**: Rotate light vertically
+- **F**: Toggle fog effect
+- **Shift+S**: Toggle shadows
+- **G**: Toggle grid
+- **X**: Toggle axis indicators
+
+**Simulation:**
+- **T**: Toggle force layout calculation
+- **P**: Pause/resume physics (legacy)
+- **H**: Show/hide help overlay
 - **ESC**: Exit application
+
+**UI Sliders (when visible):**
+- **Repulsion**: Node-to-node push force
+- **Attraction**: Edge spring strength
+- **Decay**: Velocity damping
+- **Centering**: Pull toward origin
+- **Dimension**: 1D/2D/3D layout control
+- **RenderDim**: Visual dimension (separate from physics)
+
+## Inventory State Space Visualization
+
+The `-i` (inventory mode) flag transforms the visualization from individual agent trajectories to a **unified state space** where:
+
+### Nodes = Unique Inventory States
+Each node represents a unique combination of items, aggregated across all agents:
+- `{heart: 5, ore_red: 2}` becomes one node
+- `{heart: 5, ore_red: 3}` becomes a different node
+- The same state reached by different agents maps to the **same node**
+
+### Edges = State Transitions
+Edges connect states when agents transition between them:
+- Green edges: Inventory increased (gained items)
+- Orange edges: Inventory decreased (lost/used items)
+- Yellow edges: Mixed changes (gained some, lost others)
+- Edge thickness: Frequency of this transition
+
+### Abstract Positioning
+Unlike traditional graphs where axes represent specific values, Graphew uses **force-directed layout** to position nodes:
+- Similar states naturally cluster together
+- Common transitions create "highways" through state space
+- Rare states appear as outliers or isolated nodes
+- The 3D structure emerges from the relationships, not predefined axes
+
+### Why This Matters
+This approach reveals:
+- **Strategy Clusters**: Groups of states that successful agents visit
+- **Bottlenecks**: States that many paths pass through
+- **Dead Ends**: States that lead nowhere productive
+- **Optimal Paths**: Shortest routes to high-value states
+
+### Filtering Power
+The `-I` flag lets you focus on specific item dynamics:
+- Track single items to see collection patterns
+- Combine items to understand trade-offs
+- Filter by time to see strategy evolution
 
 ## Data Format Support
 

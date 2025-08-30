@@ -141,8 +141,21 @@ public:
         UISlider() : target(nullptr), min_value(0), max_value(1), last_value(0), rect_px(), dragging(false) {}
     };
     
+    struct UICheckbox {
+        std::string label;
+        bool* target;
+        bool last_value;
+        struct RectPx { float left, top, width, height; } rect_px;
+        UICheckbox() : target(nullptr), last_value(false), rect_px() {}
+    };
+    
     void clear_sliders();
     void add_slider(const std::string& label, float* target, float min_value, float max_value);
+    
+    // Checkbox methods
+    void clear_checkboxes();
+    void add_checkbox(const std::string& label, bool* target);
+    void draw_ui_checkboxes();
     
 private:
     void handle_events();
@@ -162,6 +175,11 @@ private:
     void draw_help_overlay_sfml();
     std::vector<UISlider> ui_sliders;
     void layout_ui_sliders();
+    
+    // Checkboxes
+    std::vector<UICheckbox> ui_checkboxes;
+    void layout_ui_checkboxes();
+    void handle_checkbox_event(const sf::Event& ev);
     float slider_panel_x = 50.0f;
     float slider_panel_y = 80.0f;
     float slider_panel_padding = 12.0f;
@@ -170,6 +188,8 @@ private:
     float slider_vertical_spacing = 38.0f;
     bool ui_mouse_captured = false;
     bool is_mouse_over_ui(const sf::Vector2f& mps) const;
+    
+
 
     // Render-dimension helpers
     inline float axis_weight_render(float dimension, float axisIndex) const {
@@ -184,6 +204,8 @@ private:
 public:
     void set_render_dimension(float d) { render_dimension = std::max(1.0f, std::min(3.0f, d)); }
     float get_render_dimension() const { return render_dimension; }
+    
+
 };
 
 sf::Texture pixels_to_sfml_texture(const Pixels& pixels);
