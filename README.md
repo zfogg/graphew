@@ -6,6 +6,9 @@ A performant C++ application for visualizing AI agent behavior from [Metta AI](h
 
 Graphew transforms AI agent replay data into interactive 3D visualizations that reveal the structure of agent behavior patterns. Inspired by [swaptube's Klotski puzzle analysis](https://www.youtube.com/@twoswap), it uses force-directed graph layouts to show how agents navigate through inventory strategy spaces over time.
 
+![o2](https://github.com/user-attachments/assets/842899a0-66a9-48b4-a877-6efd6195548c)
+
+
 ### Key Features
 
 - **Force-Directed Layouts**: Physics-based graph positioning
