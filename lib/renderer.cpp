@@ -3,7 +3,9 @@
 #include <iostream>
 
 GraphRenderer::GraphRenderer() 
-    : zoom_level(1.0f), zoom_speed(0.1f), view_center(0, 0) {
+    : zoom_level(1.0f), zoom_speed(0.1f), view_center(0, 0),
+      camera_position(0, 0, 15), camera_target(0, 0, 0), camera_distance(15.0f),
+      camera_angle_h(0.0f), camera_angle_v(0.3f), auto_rotate(true), auto_rotate_speed(0.5f) {
 }
 
 GraphRenderer::~GraphRenderer() {
@@ -36,12 +38,11 @@ void GraphRenderer::handle_events() {
         }
         else if (auto* keyPress = event->getIf<sf::Event::KeyPressed>()) {
             if (keyPress->code == sf::Keyboard::Key::R) {
-                // Reset view
-                zoom_level = 1.0f;
-                view_center = sf::Vector2f(0, 0);
-                view.setCenter(view_center);
-                view.setSize(sf::Vector2f(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT));
-                window.setView(view);
+                reset_camera();
+            }
+            else if (keyPress->code == sf::Keyboard::Key::Space) {
+                auto_rotate = !auto_rotate;
+                std::cout << "Auto-rotation " << (auto_rotate ? "enabled" : "disabled") << std::endl;
             }
         }
     }
@@ -68,6 +69,18 @@ void GraphRenderer::handle_events() {
 
 void GraphRenderer::update_camera() {
     handle_events();
+    
+    // Auto-rotation for full graph visibility
+    if (auto_rotate) {
+        float time = rotation_clock.getElapsedTime().asSeconds();
+        camera_angle_h += auto_rotate_speed * time;
+        rotation_clock.restart();
+        
+        // Gentle vertical oscillation
+        camera_angle_v = 0.3f + 0.2f * std::sin(time * 0.3f);
+    }
+    
+    update_camera_position();
 }
 
 void GraphRenderer::draw_grid() {
@@ -108,19 +121,113 @@ void GraphRenderer::draw_grid() {
     window.draw(vertices.data(), vertices.size(), sf::PrimitiveType::Lines);
 }
 
-sf::Vector2f GraphRenderer::world_to_screen(const Vector3& world_pos) {
-    // Simple orthographic projection (ignoring Z for 2D display)
-    float scale = 50.0f; // Scale factor to make graph visible
-    return sf::Vector2f(world_pos.x * scale, -world_pos.y * scale); // Flip Y for screen coordinates
+void GraphRenderer::update_camera_position() {
+    // Calculate 3D camera position based on angles
+    camera_position.x = camera_target.x + camera_distance * std::cos(camera_angle_v) * std::cos(camera_angle_h);
+    camera_position.y = camera_target.y + camera_distance * std::sin(camera_angle_v);
+    camera_position.z = camera_target.z + camera_distance * std::cos(camera_angle_v) * std::sin(camera_angle_h);
+}
+
+sf::Vector2f GraphRenderer::world_to_screen_3d(const Vector3& world_pos) {
+    // Transform world position relative to camera
+    Vector3 relative_pos = world_pos - camera_position;
+    
+    // Create view matrix (simplified)
+    Vector3 forward = (camera_target - camera_position).normalize();
+    Vector3 right = Vector3(forward.z, 0, -forward.x).normalize(); // Cross with up(0,1,0)
+    Vector3 up = Vector3(-forward.x * forward.y, forward.x * forward.x + forward.z * forward.z, -forward.z * forward.y).normalize();
+    
+    // Transform to camera space
+    float cam_x = relative_pos.x * right.x + relative_pos.y * right.y + relative_pos.z * right.z;
+    float cam_y = relative_pos.x * up.x + relative_pos.y * up.y + relative_pos.z * up.z;
+    float cam_z = relative_pos.x * forward.x + relative_pos.y * forward.y + relative_pos.z * forward.z;
+    
+    // Perspective projection
+    float perspective_scale = apply_perspective(cam_z);
+    float screen_x = cam_x * perspective_scale + DEFAULT_SCREEN_WIDTH / 2.0f;
+    float screen_y = -cam_y * perspective_scale + DEFAULT_SCREEN_HEIGHT / 2.0f; // Flip Y
+    
+    return sf::Vector2f(screen_x, screen_y);
+}
+
+float GraphRenderer::apply_perspective(float z_depth) {
+    float fov = 60.0f; // Field of view in degrees
+    float focal_length = DEFAULT_SCREEN_HEIGHT / (2.0f * std::tan(fov * M_PI / 360.0f));
+    
+    // Prevent division by zero and clamp minimum distance
+    float safe_z = std::max(z_depth, 0.1f);
+    return focal_length / safe_z * zoom_level;
+}
+
+void GraphRenderer::reset_camera() {
+    camera_distance = 15.0f;
+    camera_angle_h = 0.0f;
+    camera_angle_v = 0.3f;
+    camera_target = Vector3(0, 0, 0);
+    zoom_level = 1.0f;
+    view_center = sf::Vector2f(0, 0);
+    view.setCenter(view_center);
+    view.setSize(sf::Vector2f(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT));
+    window.setView(view);
+    update_camera_position();
+}
+
+void GraphRenderer::calculate_graph_bounds(const Graph3D& graph, Vector3& min_bounds, Vector3& max_bounds) {
+    if (graph.node_count == 0) {
+        min_bounds = max_bounds = Vector3(0, 0, 0);
+        return;
+    }
+    
+    min_bounds = max_bounds = graph.nodes[0].position;
+    
+    for (uint32_t i = 1; i < graph.node_count; i++) {
+        const Vector3& pos = graph.nodes[i].position;
+        
+        min_bounds.x = std::min(min_bounds.x, pos.x);
+        min_bounds.y = std::min(min_bounds.y, pos.y);
+        min_bounds.z = std::min(min_bounds.z, pos.z);
+        
+        max_bounds.x = std::max(max_bounds.x, pos.x);
+        max_bounds.y = std::max(max_bounds.y, pos.y);
+        max_bounds.z = std::max(max_bounds.z, pos.z);
+    }
+    
+    // Set camera to view entire graph
+    Vector3 center = (min_bounds + max_bounds) * 0.5f;
+    Vector3 size = max_bounds - min_bounds;
+    float max_dimension = std::max({size.x, size.y, size.z});
+    
+    camera_target = center;
+    camera_distance = std::min(max_dimension * 1.5f + 10.0f, 100.0f); // Closer camera, max distance cap
+    update_camera_position();
 }
 
 void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
     window.clear(sf::Color::Black);
     
+    // Auto-adjust camera to fit graph on first frame
+    static bool first_frame = true;
+    if (first_frame && graph.node_count > 0) {
+        Vector3 min_bounds, max_bounds;
+        calculate_graph_bounds(graph, min_bounds, max_bounds);
+        std::cout << "Graph bounds: (" << min_bounds.x << "," << min_bounds.y << "," << min_bounds.z 
+                  << ") to (" << max_bounds.x << "," << max_bounds.y << "," << max_bounds.z << ")" << std::endl;
+        std::cout << "Camera distance set to: " << camera_distance << std::endl;
+        first_frame = false;
+    }
+    
     draw_grid();
     
-    // Draw edges first (so they appear behind nodes)
+    // Draw edges with 3D perspective
     std::vector<sf::Vertex> edge_vertices;
+    
+    // Debug: Print edge count
+    static bool printed_debug = false;
+    if (!printed_debug) {
+        std::cout << "Rendering " << graph.edge_count << " edges" << std::endl;
+        printed_debug = true;
+    }
+    
     for (uint32_t i = 0; i < graph.edge_count; i++) {
         const GraphEdge& edge = graph.edges[i];
         if (!edge.visible) continue;
@@ -128,33 +235,64 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         const GraphNode& from_node = graph.nodes[edge.from_id];
         const GraphNode& to_node = graph.nodes[edge.to_id];
         
-        sf::Vector2f from_pos = world_to_screen(from_node.position);
-        sf::Vector2f to_pos = world_to_screen(to_node.position);
+        sf::Vector2f from_pos = world_to_screen_3d(from_node.position);
+        sf::Vector2f to_pos = world_to_screen_3d(to_node.position);
         
-        sf::Color edge_color(edge.color.r, edge.color.g, edge.color.b, edge.color.a);
-        sf::Vertex v1, v2;
-        v1.position = from_pos;
-        v1.color = edge_color;
-        v2.position = to_pos;
-        v2.color = edge_color;
-        edge_vertices.push_back(v1);
-        edge_vertices.push_back(v2);
+        // Make edges visible with good contrast and thickness
+        sf::Color edge_color(200, 200, 200, 180); // Light gray, semi-transparent
+        
+        // Draw multiple lines for thickness
+        for (int offset = -1; offset <= 1; offset++) {
+            sf::Vector2f offset_from = from_pos + sf::Vector2f(offset, 0);
+            sf::Vector2f offset_to = to_pos + sf::Vector2f(offset, 0);
+            
+            sf::Vertex v1, v2;
+            v1.position = offset_from;
+            v1.color = edge_color;
+            v2.position = offset_to;
+            v2.color = edge_color;
+            edge_vertices.push_back(v1);
+            edge_vertices.push_back(v2);
+            
+            // Also add vertical offset for extra thickness
+            if (offset == 0) {
+                sf::Vector2f v_offset_from = from_pos + sf::Vector2f(0, 1);
+                sf::Vector2f v_offset_to = to_pos + sf::Vector2f(0, 1);
+                
+                sf::Vertex v3, v4;
+                v3.position = v_offset_from;
+                v3.color = edge_color;
+                v4.position = v_offset_to;
+                v4.color = edge_color;
+                edge_vertices.push_back(v3);
+                edge_vertices.push_back(v4);
+            }
+        }
     }
     
     if (!edge_vertices.empty()) {
         window.draw(edge_vertices.data(), edge_vertices.size(), sf::PrimitiveType::Lines);
     }
     
-    // Draw nodes
+    // Draw nodes with 3D perspective and depth-based sizing
     for (uint32_t i = 0; i < graph.node_count; i++) {
         const GraphNode& node = graph.nodes[i];
         if (!node.visible) continue;
         
-        sf::Vector2f screen_pos = world_to_screen(node.position);
+        sf::Vector2f screen_pos = world_to_screen_3d(node.position);
         
-        sf::CircleShape circle(node.radius * 25.0f); // Scale radius for visibility
+        // Calculate depth for perspective scaling
+        Vector3 relative_pos = node.position - camera_position;
+        Vector3 forward = (camera_target - camera_position).normalize();
+        float depth = relative_pos.x * forward.x + relative_pos.y * forward.y + relative_pos.z * forward.z;
+        
+        float perspective_scale = apply_perspective(depth);
+        float visual_radius = node.radius * perspective_scale * 0.5f; // Scale down for better visibility
+        visual_radius = std::max(2.0f, std::min(visual_radius, 50.0f)); // Clamp radius
+        
+        sf::CircleShape circle(visual_radius);
         circle.setFillColor(sf::Color(node.color.r, node.color.g, node.color.b, node.color.a));
-        circle.setOutlineThickness(2.0f);
+        circle.setOutlineThickness(1.0f);
         circle.setOutlineColor(sf::Color::White);
         circle.setPosition(sf::Vector2f(screen_pos.x - circle.getRadius(), screen_pos.y - circle.getRadius()));
         
