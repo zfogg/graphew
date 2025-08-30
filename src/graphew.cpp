@@ -117,12 +117,27 @@ int main(int argc, char* argv[]) {
         
     } else {
         std::cerr << "No replay file provided. Use -f to specify a replay file.\n";
-        std::cerr << "Example: ./bin/replay_graph -f sample.json\n";
+        std::cerr << "Example: ./bin/graphew -f sample.json\n";
         cleanup_args(&args);
         return EXIT_FAILURE;
     }
     
     std::cout << "Graph built: " << graph3d->node_count << " nodes, " << graph3d->edge_count << " edges\n";
+    
+    // Validate that we have data to render
+    if (graph3d->node_count == 0) {
+        std::cerr << "Error: No graph nodes created from replay data.\n";
+        std::cerr << "This may indicate:\n";
+        std::cerr << "  - No agents found in the replay file\n";
+        std::cerr << "  - Unsupported file format\n";
+        std::cerr << "  - No inventory changes detected\n";
+        cleanup_args(&args);
+        return EXIT_FAILURE;
+    }
+    
+    if (graph3d->edge_count == 0) {
+        std::cerr << "Warning: No edges created - agents may not have changed inventory states\n";
+    }
     
     // Create info overlay showing current visualization mode
     Pixels info_overlay(400, 150);
