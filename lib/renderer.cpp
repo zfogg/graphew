@@ -1401,7 +1401,7 @@ void GraphRenderer::handle_pinch_gesture(float magnification, float cursor_x, fl
             float cos_h = std::cos(camera_angle_h);
             float sin_h = std::sin(camera_angle_h);
             float cos_v = std::cos(camera_angle_v);
-            float sin_v = std::sin(camera_angle_v);
+            // float sin_v = std::sin(camera_angle_v);
 
             // Inverse vertical rotation
             float offset_y = final_y / cos_v; // Simplified - assumes temp_z component is small
@@ -1424,9 +1424,6 @@ void GraphRenderer::handle_pinch_gesture(float magnification, float cursor_x, fl
             Vector3 world_offset = world_point_under_cursor - camera_target;
             Vector3 adjusted_offset = world_offset * (1.0f - scale_ratio);
             camera_target = camera_target + adjusted_offset;
-
-            std::cout << "Native pinch zoom: magnification=" << magnification
-                      << " zoom_factor=" << zoom_factor << " at window (" << window_cursor_x << "," << window_cursor_y << ")" << std::endl;
         }
     }
 }
