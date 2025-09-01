@@ -324,8 +324,8 @@ void GraphRenderer::handle_events() {
         }
     }
     
-    // Handle mouse dragging for panning
-    if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left) && !ui_mouse_captured) {
+    // Handle mouse dragging for panning (only when window has focus)
+    if (window.hasFocus() && sf::Mouse::isButtonPressed(sf::Mouse::Button::Left) && !ui_mouse_captured) {
         sf::Vector2i mouse_pos = sf::Mouse::getPosition(window);
         sf::Vector2f current_mouse = static_cast<sf::Vector2f>(mouse_pos);
         
@@ -511,8 +511,8 @@ void GraphRenderer::handle_camera_movement(float delta_time) {
     // Only process keyboard movement when window has focus
     bool has_focus = window.hasFocus();
     
-    // Camera rotation with arrow keys or mouse right-drag
-    if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Right)) {
+    // Camera rotation with arrow keys or mouse right-drag (only when window has focus)
+    if (has_focus && sf::Mouse::isButtonPressed(sf::Mouse::Button::Right)) {
         sf::Vector2i mouse_pos = sf::Mouse::getPosition(window);
         sf::Vector2f current_mouse = static_cast<sf::Vector2f>(mouse_pos);
         
