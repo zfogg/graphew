@@ -76,6 +76,9 @@ struct InventoryFilterConfig {
     // Whether to show only states where inventory changed
     bool only_changes = true;
     
+    // If true, preserve temporal structure (don't aggregate identical states)
+    bool timeline_mode = false;
+    
     // Minimum quantity to consider (filter out zero quantities)
     int min_quantity = 0;
     
@@ -84,9 +87,20 @@ struct InventoryFilterConfig {
     int max_timestep = -1;
     
     // Visual options
-    bool color_by_total = false;  // Color nodes by total inventory value
+    enum class ColorMode {
+        DEFAULT,        // Default coloring
+        BY_TOTAL,       // Color by total inventory value
+        BY_HEARTS,      // Color by heart count
+        BY_SPECIFIC_ITEM, // Color by specific item quantity
+        BY_FREQUENCY    // Color by state frequency
+    } color_mode = ColorMode::DEFAULT;
+    
+    std::string color_by_item = "heart";  // Which item to color by (for BY_SPECIFIC_ITEM mode)
     bool size_by_frequency = false;  // Size nodes by how often state occurs
     float node_scale = 5.0f;  // Scale factor for positioning
+    
+    // Legacy compatibility
+    bool color_by_total = false;  // Deprecated: use color_mode instead
     
     // Layout algorithm for abstract space
     enum LayoutMode {
@@ -204,21 +218,61 @@ public:
                     
                     // Color based on configuration
                     Color color = RED;
-                    if (config.color_by_total) {
-                        int total = 0;
-                        for (const auto& [item, qty] : state.items) {
-                            if (config.tracked_items.empty() || 
-                                config.tracked_items.count(item) > 0) {
-                                total += qty;
+                    float value = 0;
+                    float max_value = 100.0f;  // Default normalization
+                    
+                    // Handle legacy flag
+                    auto mode = config.color_mode;
+                    if (config.color_by_total && mode == InventoryFilterConfig::ColorMode::DEFAULT) {
+                        mode = InventoryFilterConfig::ColorMode::BY_TOTAL;
+                    }
+                    
+                    switch (mode) {
+                        case InventoryFilterConfig::ColorMode::BY_TOTAL: {
+                            for (const auto& [item, qty] : state.items) {
+                                if (config.tracked_items.empty() || 
+                                    config.tracked_items.count(item) > 0) {
+                                    value += qty;
+                                }
                             }
+                            max_value = 100.0f;
+                            break;
                         }
-                        // Map total to color gradient
-                        float t = std::min(1.0f, total / 100.0f);
-                        color = Color(
-                            static_cast<uint8_t>(255 * (1 - t)),
-                            static_cast<uint8_t>(255 * t),
-                            128
-                        );
+                        case InventoryFilterConfig::ColorMode::BY_HEARTS: {
+                            auto it = state.items.find("heart");
+                            value = (it != state.items.end()) ? it->second : 0;
+                            max_value = 20.0f;  // Typical max hearts
+                            break;
+                        }
+                        case InventoryFilterConfig::ColorMode::BY_SPECIFIC_ITEM: {
+                            auto it = state.items.find(config.color_by_item);
+                            value = (it != state.items.end()) ? it->second : 0;
+                            max_value = 50.0f;  // Typical max for items
+                            break;
+                        }
+                        case InventoryFilterConfig::ColorMode::BY_FREQUENCY: {
+                            value = freq;
+                            max_value = 10.0f;  // Normalize frequency
+                            break;
+                        }
+                        case InventoryFilterConfig::ColorMode::DEFAULT:
+                        default:
+                            color = RED;
+                            break;
+                    }
+                    
+                    // Apply gradient coloring if not default
+                    if (mode != InventoryFilterConfig::ColorMode::DEFAULT) {
+                        float t = std::min(1.0f, value / max_value);
+                        if (t < 0.5f) {
+                            // Red to Yellow
+                            float s = t * 2.0f;
+                            color = Color(255, static_cast<uint8_t>(255 * s), 0);
+                        } else {
+                            // Yellow to Green
+                            float s = (t - 0.5f) * 2.0f;
+                            color = Color(static_cast<uint8_t>(255 * (1 - s)), 255, 0);
+                        }
                     }
                     
                     // Size based on frequency
@@ -246,7 +300,9 @@ public:
             }
         }
         
-        // Second pass: create edges for transitions
+        // Second pass: create edges for unique transitions
+        std::set<std::pair<std::string, std::string>> seen_transitions;
+        
         for (size_t i = 1; i < states.size(); i++) {
             const auto& prev_state = states[i-1];
             const auto& curr_state = states[i];
@@ -263,6 +319,13 @@ public:
             if (config.only_changes && prev_key == curr_key) {
                 continue;
             }
+            
+            // Check if we've seen this transition before
+            auto transition = std::make_pair(prev_key, curr_key);
+            if (seen_transitions.count(transition) > 0) {
+                continue;  // Skip duplicate transitions
+            }
+            seen_transitions.insert(transition);
             
             auto prev_it = state_to_node.find(prev_key);
             auto curr_it = state_to_node.find(curr_key);

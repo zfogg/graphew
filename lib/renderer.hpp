@@ -109,6 +109,7 @@ public:
     void render_frame(const Graph3D& graph, const Pixels& overlay = Pixels());
     bool should_close();
     void cleanup();
+    bool window_has_focus() const { return window.hasFocus(); }
     void reset_camera();
     void calculate_graph_bounds(const Graph3D& graph, Vector3& min_bounds, Vector3& max_bounds);
     

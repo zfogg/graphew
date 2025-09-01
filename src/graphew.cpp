@@ -3,6 +3,8 @@
 #include <vector>
 #include <sstream>
 #include <set>
+#include <algorithm>
+#include <cstdlib>
 #include "graph.hpp"
 #include "renderer.hpp"
 #include "options.hpp"
@@ -70,6 +72,14 @@ int main(int argc, char* argv[]) {
     std::map<std::string, bool> item_tracking;     // Keep tracking state
     std::set<std::string> tracked_items;           // Current tracked items
     
+    // Color mode selection
+    bool color_by_hearts = false;
+    bool color_by_reward = false;
+    bool color_by_specific = false;
+    std::string specific_item = "red_ore";
+    
+    // Graph structure mode (not needed - temporal is always preserved)
+    
     if (args.input_file) {
         std::cout << "Loading replay from " << (args.compressed ? "compressed " : "") 
                   << "file: " << args.input_file << std::endl;
@@ -123,6 +133,15 @@ int main(int argc, char* argv[]) {
                 renderer->add_checkbox(item, &track);
             }
             
+            // Add visual option checkboxes
+            renderer->add_checkbox("--- Visual Options ---", nullptr);  // Separator
+            renderer->add_checkbox("Size by Frequency", &args.size_by_freq);
+            renderer->add_checkbox("--- Color Modes ---", nullptr);  // Separator
+            renderer->add_checkbox("Default Color", nullptr);  // Will handle this specially
+            renderer->add_checkbox("Color by Total Items", &args.color_by_total);
+            renderer->add_checkbox("Color by Hearts", &color_by_hearts);
+            renderer->add_checkbox("Color by Specific Item", &color_by_specific);
+            
             // Build inventory states from replay (store in outer scope for rebuilding)
             inventory_states.clear();
             
@@ -162,7 +181,7 @@ int main(int argc, char* argv[]) {
                             if (tv.timestep <= timestep) {
                                 value = static_cast<int>(tv.value);
                             } else {
-                                break;
+                    break;
                             }
                         }
                         
@@ -189,7 +208,6 @@ int main(int argc, char* argv[]) {
             // Configure the filter
             InventoryFilterConfig config;
             config.tracked_items = tracked_items;
-            config.color_by_total = args.color_by_total;
             config.size_by_frequency = args.size_by_freq;
             config.min_timestep = args.min_timestep;
             config.max_timestep = args.max_timestep;
@@ -197,38 +215,166 @@ int main(int argc, char* argv[]) {
             config.only_changes = true;  // Only show transitions that change inventory
             config.layout_mode = InventoryFilterConfig::FORCE_DIRECTED;
             
+            // Set color mode based on checkboxes
+            if (args.color_by_total) {
+                config.color_mode = InventoryFilterConfig::ColorMode::BY_TOTAL;
+            } else if (color_by_hearts) {
+                config.color_mode = InventoryFilterConfig::ColorMode::BY_HEARTS;
+            } else if (color_by_specific) {
+                config.color_mode = InventoryFilterConfig::ColorMode::BY_SPECIFIC_ITEM;
+                config.color_by_item = specific_item;
+            } else {
+                config.color_mode = InventoryFilterConfig::ColorMode::DEFAULT;
+            }
+            
             // Create the transition graph
             InventoryFilter::create_transition_graph(*graph3d, inventory_states, config);
             
         } else {
-            // Use the original dimensional graph builder
-            // Find inventory items that agents actually collected
-            std::vector<std::string> inventory_dims;
-            std::vector<std::string> active_items;
+            // Build temporal graph with shared nodes for same inventory states
+            // Different from inventory mode: keeps all transitions (not deduplicated)
             
-            // Check which items have non-zero values across agents
-            for (const std::string& item : replay.inventory_items) {
-                bool has_values = false;
-                for (const auto& agent : replay.agents) {
-                    auto it = agent.inventory_over_time.find(item);
-                    if (it != agent.inventory_over_time.end() && !it->second.empty() && it->second.back().value > 0) {
-                        has_values = true;
-                        break;
+            // Collect all states with their agent and timestep info
+            struct TemporalState {
+                InventoryState state;
+                int agent_id;
+                int timestep;
+                std::string inventory_key;
+            };
+            std::vector<TemporalState> all_states;
+            
+            for (const auto& agent : replay.agents) {
+                std::set<int> timesteps;
+                
+                // Collect all timesteps where something changed
+                for (const auto& [item, values] : agent.inventory_over_time) {
+                    for (const auto& tv : values) {
+                        timesteps.insert(tv.timestep);
                     }
                 }
-                if (has_values) active_items.push_back(item);
+                for (const auto& tv : agent.total_reward_over_time) {
+                    timesteps.insert(tv.timestep);
+                }
+                
+                // Create a state for each timestep
+                for (int t : timesteps) {
+                    TemporalState ts;
+                    ts.agent_id = agent.agent_id;
+                    ts.timestep = t;
+                    ts.state.timestep = t;
+                    ts.state.agent_id = agent.agent_id;
+                    
+                    // Get inventory at this time
+                    for (const std::string& item : replay.inventory_items) {
+                        int qty = static_cast<int>(agent.get_inventory_at_time(item, t));
+                        if (qty > 0) {
+                            ts.state.items[item] = qty;
+                        }
+                    }
+                    
+                    // Create inventory key (same states will have same key)
+                    std::set<std::string> all_items;
+                    for (const auto& [item, _] : ts.state.items) {
+                        all_items.insert(item);
+                    }
+                    ts.inventory_key = ts.state.get_key(all_items);
+                    
+                    all_states.push_back(ts);
+                }
             }
             
-            // Use active items or fallback to first available items
-            if (active_items.size() >= 3) {
-                inventory_dims = {active_items[0], active_items[1], active_items[2]};
-            } else if (active_items.size() >= 2) {
-                inventory_dims = {active_items[0], active_items[1], "time"}; // Use time as Z dimension
-            } else {
-                inventory_dims = {"ore_red", "battery_red", "time"}; // fallback with time
+            // Sort by timestep then agent
+            std::sort(all_states.begin(), all_states.end(),
+                     [](const auto& a, const auto& b) { 
+                         if (a.timestep != b.timestep) return a.timestep < b.timestep;
+                         return a.agent_id < b.agent_id;
+                     });
+            
+            // Create nodes - share nodes for same inventory states
+            std::map<std::string, uint32_t> inventory_to_node;  // Map inventory state to node
+            std::map<std::pair<int, int>, uint32_t> agent_time_to_node;  // Map (agent,time) to node
+            
+            for (const auto& ts : all_states) {
+                uint32_t node_id;
+                
+                // Check if this inventory state already has a node
+                auto it = inventory_to_node.find(ts.inventory_key);
+                if (it != inventory_to_node.end()) {
+                    // Reuse existing node for this inventory state
+                    node_id = it->second;
+                } else {
+                    // Create new node for this inventory state
+                    Vector3 pos(
+                        (rand() % 200 - 100) * 0.1f,
+                        (rand() % 200 - 100) * 0.1f,
+                        (rand() % 200 - 100) * 0.1f
+                    );
+                    
+                    // Color based on inventory contents
+                    int total_items = 0;
+                    for (const auto& [item, qty] : ts.state.items) {
+                        total_items += qty;
+                    }
+                    
+                    // Gradient from blue (empty) to green (many items)
+                    float item_ratio = std::min(1.0f, total_items / 20.0f);
+                    Color color(
+                        50,
+                        100 + static_cast<uint8_t>(155 * item_ratio),
+                        200 - static_cast<uint8_t>(100 * item_ratio)
+                    );
+                    
+                    float radius = 0.4f + 0.1f * item_ratio;
+                    
+                    std::string label = "State_" + std::to_string(inventory_to_node.size());
+                    
+                    node_id = graph3d->add_node(pos, color, radius, label);
+                    inventory_to_node[ts.inventory_key] = node_id;
+                    
+                    // Store metadata
+                    if (node_id < MAX_NODES) {
+                        for (const auto& [item, qty] : ts.state.items) {
+                            graph3d->nodes[node_id].properties[item] = std::to_string(qty);
+                        }
+                    }
+                }
+                
+                // Map this agent-time pair to the node
+                agent_time_to_node[{ts.agent_id, ts.timestep}] = node_id;
             }
             
-            AgentGraphBuilder::build_inventory_dimensional_graph(replay, *graph3d, inventory_dims);
+            // Create edges for each agent's trajectory
+            std::map<int, std::vector<std::pair<int, int>>> agent_timeline;
+            for (const auto& ts : all_states) {
+                agent_timeline[ts.agent_id].push_back({ts.timestep, ts.agent_id});
+            }
+            
+            for (const auto& [agent_id, timeline] : agent_timeline) {
+                for (size_t i = 1; i < timeline.size(); i++) {
+                    auto prev_key = std::make_pair(agent_id, timeline[i-1].first);
+                    auto curr_key = std::make_pair(agent_id, timeline[i].first);
+                    
+                    auto prev_it = agent_time_to_node.find(prev_key);
+                    auto curr_it = agent_time_to_node.find(curr_key);
+                    
+                    if (prev_it != agent_time_to_node.end() && curr_it != agent_time_to_node.end()) {
+                        uint32_t from_node = prev_it->second;
+                        uint32_t to_node = curr_it->second;
+                        
+                        // Color edges by agent
+                        Color edge_color = Color(
+                            150 + (agent_id * 37) % 105,
+                            150 + (agent_id * 73) % 105,
+                            150 + (agent_id * 113) % 105
+                        );
+                        
+                        graph3d->add_edge(from_node, to_node, edge_color, 1.0f);
+                    }
+                }
+            }
+            
+            std::cout << "Created " << inventory_to_node.size() << " unique inventory state nodes\n";
+            std::cout << "Mapped " << agent_time_to_node.size() << " agent-timestep pairs\n";
         }
         
     } else {
@@ -340,6 +486,10 @@ int main(int argc, char* argv[]) {
     
     bool needs_rebuild = false;
     std::set<std::string> last_tracked_items = tracked_items;
+    bool last_color_by_total = args.color_by_total;
+    bool last_size_by_freq = args.size_by_freq;
+    bool last_color_by_hearts = color_by_hearts;
+    bool last_color_by_specific = color_by_specific;
     
     while (!renderer->should_close()) {
         float delta_time = clock.restart().asSeconds();
@@ -348,7 +498,7 @@ int main(int argc, char* argv[]) {
         // Sync render dimension from slider
         renderer->set_render_dimension(render_dim);
         
-        // Check if item tracking changed (only in inventory mode)
+        // Check if item tracking or visual mode changed (only in inventory mode)
         if (args.inventory_mode) {
             std::set<std::string> current_tracked;
             for (const auto& [item, track] : item_tracking) {
@@ -357,10 +507,35 @@ int main(int argc, char* argv[]) {
                 }
             }
             
+            // Check if we need to rebuild due to item changes
             if (current_tracked != last_tracked_items) {
                 needs_rebuild = true;
                 last_tracked_items = current_tracked;
                 tracked_items = current_tracked;
+            }
+            
+            // Enforce radio button behavior for color modes
+            if (args.color_by_total && args.color_by_total != last_color_by_total) {
+                color_by_hearts = false;
+                color_by_specific = false;
+            } else if (color_by_hearts && color_by_hearts != last_color_by_hearts) {
+                args.color_by_total = false;
+                color_by_specific = false;
+            } else if (color_by_specific && color_by_specific != last_color_by_specific) {
+                args.color_by_total = false;
+                color_by_hearts = false;
+            }
+            
+            // Check if visual mode changed (also needs rebuild to recolor)
+            if (args.color_by_total != last_color_by_total || 
+                args.size_by_freq != last_size_by_freq ||
+                color_by_hearts != last_color_by_hearts ||
+                color_by_specific != last_color_by_specific) {
+                needs_rebuild = true;
+                last_color_by_total = args.color_by_total;
+                last_size_by_freq = args.size_by_freq;
+                last_color_by_hearts = color_by_hearts;
+                last_color_by_specific = color_by_specific;
             }
         }
         
@@ -380,13 +555,24 @@ int main(int argc, char* argv[]) {
             // Rebuild with new tracking
             InventoryFilterConfig config;
             config.tracked_items = tracked_items;
-            config.color_by_total = args.color_by_total;
             config.size_by_frequency = args.size_by_freq;
             config.min_timestep = args.min_timestep;
             config.max_timestep = args.max_timestep;
             config.separate_by_agent = false;
             config.only_changes = true;
             config.layout_mode = InventoryFilterConfig::FORCE_DIRECTED;
+            
+            // Set color mode based on checkboxes
+            if (args.color_by_total) {
+                config.color_mode = InventoryFilterConfig::ColorMode::BY_TOTAL;
+            } else if (color_by_hearts) {
+                config.color_mode = InventoryFilterConfig::ColorMode::BY_HEARTS;
+            } else if (color_by_specific) {
+                config.color_mode = InventoryFilterConfig::ColorMode::BY_SPECIFIC_ITEM;
+                config.color_by_item = specific_item;
+            } else {
+                config.color_mode = InventoryFilterConfig::ColorMode::DEFAULT;
+            }
             
             InventoryFilter::create_transition_graph(*graph3d, inventory_states, config);
             
@@ -398,7 +584,8 @@ int main(int argc, char* argv[]) {
             renderer->calculate_graph_bounds(*graph3d, min_bounds, max_bounds);
         }
         
-        // Controls
+        // Controls (only when window has focus)
+        if (renderer->window_has_focus()) {
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::P)) {
             static sf::Clock key_timer;
             if (key_timer.getElapsedTime().asSeconds() > 0.5f) {
@@ -417,15 +604,16 @@ int main(int argc, char* argv[]) {
             }
         }
         
-        // Toggle continuous force layout with 'T'
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::T)) {
-            static sf::Clock key_timer;
-            if (key_timer.getElapsedTime().asSeconds() > 0.5f) {
-                force_layout_running = !force_layout_running;
-                std::cout << "Force layout " << (force_layout_running ? "running" : "paused") << std::endl;
-                key_timer.restart();
+            // Toggle continuous force layout with 'T'
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::T)) {
+                static sf::Clock key_timer;
+                if (key_timer.getElapsedTime().asSeconds() > 0.5f) {
+                    force_layout_running = !force_layout_running;
+                    std::cout << "Force layout " << (force_layout_running ? "running" : "paused") << std::endl;
+                    key_timer.restart();
+                }
             }
-        }
+        } // End of focus check
         
         // Apply force layout in real-time if running
         if (force_layout_running) {

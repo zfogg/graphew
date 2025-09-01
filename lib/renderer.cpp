@@ -221,6 +221,9 @@ void GraphRenderer::handle_events() {
             }
         }
         else if (auto* keyPress = event->getIf<sf::Event::KeyPressed>()) {
+            // Only process keyboard shortcuts when window has focus
+            if (!window.hasFocus()) continue;
+            
             // Camera presets (0-9)
             if (keyPress->code == sf::Keyboard::Key::Num0) {
                 if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
@@ -356,36 +359,40 @@ void GraphRenderer::update_camera() {
         handle_camera_movement(delta_time);
     }
     
-    // Lighting controls
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::I)) {
-        adjust_lighting(0.01f, 0);
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K)) {
-        adjust_lighting(-0.01f, 0);
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::L)) {
-        adjust_lighting(0, 0.01f);
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::J)) {
-        adjust_lighting(0, -0.01f);
+    // Lighting controls (only when window has focus)
+    if (window.hasFocus()) {
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::I)) {
+            adjust_lighting(0.01f, 0);
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K)) {
+            adjust_lighting(-0.01f, 0);
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::L)) {
+            adjust_lighting(0, 0.01f);
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::J)) {
+            adjust_lighting(0, -0.01f);
+        }
     }
 
     // Keep render-dimension in sync with layout dimension if a slider is present
     // (Dimension slider is the last one we add, so read from layout_params via main loop plumbing
     // but since we don't have it here, softly ease render_dimension toward 2 or 3 using keyboard for demo)
     
-    // Light rotation with numpad
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Numpad4)) {
-        rotate_light(-delta_time, 0);
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Numpad6)) {
-        rotate_light(delta_time, 0);
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Numpad8)) {
-        rotate_light(0, delta_time);
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Numpad2)) {
-        rotate_light(0, -delta_time);
+    // Light rotation with numpad (only when window has focus)
+    if (window.hasFocus()) {
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Numpad4)) {
+            rotate_light(-delta_time, 0);
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Numpad6)) {
+            rotate_light(delta_time, 0);
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Numpad8)) {
+            rotate_light(0, delta_time);
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Numpad2)) {
+            rotate_light(0, -delta_time);
+        }
     }
     
     update_camera_position();
@@ -501,6 +508,9 @@ void GraphRenderer::draw_axes() {
 }
 
 void GraphRenderer::handle_camera_movement(float delta_time) {
+    // Only process keyboard movement when window has focus
+    bool has_focus = window.hasFocus();
+    
     // Camera rotation with arrow keys or mouse right-drag
     if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Right)) {
         sf::Vector2i mouse_pos = sf::Mouse::getPosition(window);
@@ -518,42 +528,46 @@ void GraphRenderer::handle_camera_movement(float delta_time) {
         last_mouse_position = sf::Vector2f(0, 0);
     }
     
-    // Keyboard rotation
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left)) {
-        camera_angle_h -= camera_rotate_speed * delta_time;
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) {
-        camera_angle_h += camera_rotate_speed * delta_time;
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up)) {
-        camera_angle_v = std::min(1.5f, camera_angle_v + camera_rotate_speed * delta_time);
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down)) {
-        camera_angle_v = std::max(-1.5f, camera_angle_v - camera_rotate_speed * delta_time);
+    // Keyboard rotation (only when window has focus)
+    if (has_focus) {
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left)) {
+            camera_angle_h -= camera_rotate_speed * delta_time;
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) {
+            camera_angle_h += camera_rotate_speed * delta_time;
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up)) {
+            camera_angle_v = std::min(1.5f, camera_angle_v + camera_rotate_speed * delta_time);
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down)) {
+            camera_angle_v = std::max(-1.5f, camera_angle_v - camera_rotate_speed * delta_time);
+        }
     }
     
-    // WASD movement relative to camera direction
+    // WASD movement relative to camera direction (only when window has focus)
     Vector3 movement(0, 0, 0);
-    Vector3 forward = (camera_target - camera_position).normalize();
-    Vector3 right = Vector3(forward.z, 0, -forward.x).normalize();
-    
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W)) {
-        movement = movement + forward * camera_move_speed * delta_time;
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S)) {
-        movement = movement - forward * camera_move_speed * delta_time;
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) {
-        movement = movement - right * camera_move_speed * delta_time;
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) {
-        movement = movement + right * camera_move_speed * delta_time;
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Q)) {
-        movement.y -= camera_move_speed * delta_time;
-    }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E)) {
-        movement.y += camera_move_speed * delta_time;
+    if (has_focus) {
+        Vector3 forward = (camera_target - camera_position).normalize();
+        Vector3 right = Vector3(forward.z, 0, -forward.x).normalize();
+        
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W)) {
+            movement = movement + forward * camera_move_speed * delta_time;
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S)) {
+            movement = movement - forward * camera_move_speed * delta_time;
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) {
+            movement = movement - right * camera_move_speed * delta_time;
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) {
+            movement = movement + right * camera_move_speed * delta_time;
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Q)) {
+            movement.y -= camera_move_speed * delta_time;
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E)) {
+            movement.y += camera_move_speed * delta_time;
+        }
     }
     
     // Apply movement with smoothing
