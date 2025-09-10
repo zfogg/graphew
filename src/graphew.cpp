@@ -142,6 +142,7 @@ int main(int argc, char* argv[]) {
             renderer->add_checkbox("Color by Total Items", &args.color_by_total);
             renderer->add_checkbox("Color by Hearts", &color_by_hearts);
             renderer->add_checkbox("Color by Specific Item", &color_by_specific);
+            renderer->add_checkbox("Show Legend", &renderer->show_legend);
             
             // Build inventory states from replay (store in outer scope for rebuilding)
             inventory_states.clear();
@@ -504,8 +505,7 @@ int main(int argc, char* argv[]) {
     renderer->add_slider("Decay", &layout_params.decay, 0.3f, 0.99f);
     renderer->add_slider("Centering", &layout_params.centering_strength, 0.0f, 1.0f);
     renderer->add_slider("Dimension", &layout_params.dimension, 1.0f, 3.0f);
-    float render_dim = 3.0f;
-    renderer->add_slider("RenderDim", &render_dim, 1.0f, 3.0f);
+    // Removed RenderDim control per request
     
     // Continuous force layout (toggle with 'T')
     int layout_iterations_remaining = layout_params.iterations;
@@ -522,8 +522,7 @@ int main(int argc, char* argv[]) {
         float delta_time = clock.restart().asSeconds();
         
         renderer->update_camera();
-        // Sync render dimension from slider
-        renderer->set_render_dimension(render_dim);
+        // Render dimension removed
         
         // Check if item tracking or visual mode changed (only in inventory mode)
         if (args.inventory_mode) {

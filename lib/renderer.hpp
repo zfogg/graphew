@@ -99,7 +99,7 @@ public:
     // UI font
     sf::Font ui_font;
     bool ui_font_loaded;
-    float render_dimension = 3.0f; // 1..3 for render-space scaling
+    float render_dimension = 3.0f; // unused (legacy)
     
     GraphRenderer();
     ~GraphRenderer();
@@ -127,6 +127,10 @@ public:
     Pixels create_help_overlay();
     bool show_help;
     
+    // Color legend overlay
+    bool show_legend = false;
+    std::string legend_label;
+    
     // Expose UI drawing for sliders
     void draw_ui_sliders();
     
@@ -149,6 +153,10 @@ public:
         struct RectPx { float left, top, width, height; } rect_px;
         UICheckbox() : target(nullptr), last_value(false), rect_px() {}
     };
+    
+    // Collapsible Items panel
+    bool items_panel_collapsed = false;
+    void toggle_items_panel() { items_panel_collapsed = !items_panel_collapsed; }
     
     void clear_sliders();
     void add_slider(const std::string& label, float* target, float min_value, float max_value);
@@ -174,6 +182,7 @@ private:
     void draw_3d_sphere(const Vector3& center, float radius, const sf::Color& color);
     void load_ui_font();
     void draw_help_overlay_sfml();
+    void draw_color_legend();
     std::vector<UISlider> ui_sliders;
     void layout_ui_sliders();
     
@@ -193,18 +202,10 @@ private:
 
 
     // Render-dimension helpers
-    inline float axis_weight_render(float dimension, float axisIndex) const {
-        float t = std::min(1.0f, std::max(0.0f, dimension - axisIndex));
-        return t; // for pure 2D, axis weight becomes 0
-    }
-    inline Vector3 scale_for_render(const Vector3& v) const {
-        float wy = axis_weight_render(render_dimension, 1.0f);
-        float wz = axis_weight_render(render_dimension, 2.0f);
-        return Vector3(v.x, v.y * wy, v.z * wz);
-    }
+    inline Vector3 scale_for_render(const Vector3& v) const { return v; }
 public:
-    void set_render_dimension(float d) { render_dimension = std::max(1.0f, std::min(3.0f, d)); }
-    float get_render_dimension() const { return render_dimension; }
+    void set_render_dimension(float) {}
+    float get_render_dimension() const { return 3.0f; }
     
 
 };

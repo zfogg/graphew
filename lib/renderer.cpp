@@ -913,6 +913,66 @@ void GraphRenderer::draw_help_overlay_sfml() {
     addText("Space: Auto-rotate, P: Physics", 40.f, y, 18, sf::Color(230,230,240));
 }
 
+void GraphRenderer::draw_color_legend() {
+    if (!ui_font_loaded || !show_legend) return;
+    sf::View original_view = window.getView();
+    window.setView(window.getDefaultView());
+    
+    // Panel in bottom-right
+    sf::Vector2u ws = window.getSize();
+    float w = 260.f, h = 90.f;
+    float x = static_cast<float>(ws.x) - w - 14.f;
+    float y = static_cast<float>(ws.y) - h - 14.f;
+    sf::RectangleShape panel(sf::Vector2f(w, h));
+    panel.setPosition(sf::Vector2f(x, y));
+    panel.setFillColor(sf::Color(20, 20, 26, 200));
+    panel.setOutlineColor(sf::Color(90, 90, 120, 200));
+    panel.setOutlineThickness(1.0f);
+    window.draw(panel);
+    
+    // Title
+    sf::Text title(ui_font);
+    title.setString(legend_label.empty() ? "Legend" : legend_label);
+    title.setCharacterSize(14);
+    title.setFillColor(sf::Color(220,220,240));
+    title.setPosition(sf::Vector2f(x + 10.f, y + 6.f));
+    window.draw(title);
+    
+    // Gradient bar (red → yellow → green)
+    float gx = x + 10.f, gy = y + 36.f, gw = w - 20.f, gh = 14.f;
+    for (int i = 0; i < static_cast<int>(gw); ++i) {
+        float t = static_cast<float>(i) / std::max(1.f, gw - 1.f);
+        sf::Color c;
+        if (t < 0.5f) {
+            float s = t * 2.f; // red->yellow
+            c = sf::Color(255, static_cast<uint8_t>(255 * s), 0);
+        } else {
+            float s = (t - 0.5f) * 2.f; // yellow->green
+            c = sf::Color(static_cast<uint8_t>(255 * (1 - s)), 255, 0);
+        }
+        sf::VertexArray segment(sf::PrimitiveType::Lines, 2);
+        segment[0].position = sf::Vector2f(gx + i, gy);
+        segment[0].color = c;
+        segment[1].position = sf::Vector2f(gx + i, gy + gh);
+        segment[1].color = c;
+        window.draw(segment);
+    }
+    
+    // Labels
+    sf::Text lmin(ui_font), lmid(ui_font), lmax(ui_font);
+    lmin.setString("low"); lmid.setString("mid"); lmax.setString("high");
+    lmin.setCharacterSize(12); lmid.setCharacterSize(12); lmax.setCharacterSize(12);
+    lmin.setFillColor(sf::Color(200,200,220));
+    lmid.setFillColor(sf::Color(200,200,220));
+    lmax.setFillColor(sf::Color(200,200,220));
+    lmin.setPosition(sf::Vector2f(gx, gy + gh + 4.f));
+    lmid.setPosition(sf::Vector2f(gx + gw * 0.5f - 10.f, gy + gh + 4.f));
+    lmax.setPosition(sf::Vector2f(gx + gw - 26.f, gy + gh + 4.f));
+    window.draw(lmin); window.draw(lmid); window.draw(lmax);
+    
+    window.setView(original_view);
+}
+
 void GraphRenderer::calculate_graph_bounds(const Graph3D& graph, Vector3& min_bounds, Vector3& max_bounds) {
     if (graph.node_count == 0) {
         min_bounds = max_bounds = Vector3(0, 0, 0);
@@ -933,26 +993,8 @@ void GraphRenderer::calculate_graph_bounds(const Graph3D& graph, Vector3& min_bo
         max_bounds.z = std::max(max_bounds.z, pos.z);
     }
     
-    // Set camera to view entire graph
-    Vector3 center = (min_bounds + max_bounds) * 0.5f;
-    Vector3 size = max_bounds - min_bounds;
-    float max_dimension = std::max({size.x, size.y, size.z});
-    
-    // This method can't modify the const graph - centering should be done before calling this
-    
-    // Now camera can look at origin and graph will be centered
-    camera_target = Vector3(0, 0, 0);
-    scene_center = Vector3(0, 0, 0); // centered at origin now
-    
-    // Set appropriate camera distance and angle for good initial view
-    camera_distance = 30.0f; // Fixed distance that works well
-    camera_angle_v = 0.3f; // Good downward angle
-    camera_angle_h = 0.785f; // 45-degree angle
-    
-    std::cout << "Camera positioned at distance " << camera_distance << " looking at (" 
-              << center.x << "," << center.y << "," << center.z << ")" << std::endl;
-    
-    update_camera_position();
+    // Only compute bounds; do NOT reset camera automatically
+    // scene_center remains at origin once graph is centered externally
 }
 
 void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
@@ -1176,6 +1218,9 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         window.setView(original_view2);
     }
     
+    // Draw legend if enabled
+    draw_color_legend();
+    
     window.display();
 }
 
@@ -1272,6 +1317,20 @@ void GraphRenderer::handle_checkbox_event(const sf::Event& ev) {
             sf::Vector2f mouse_pos(static_cast<float>(pressed->position.x), 
                                   static_cast<float>(pressed->position.y));
             
+            // Handle collapse toggle if clicking header area
+            sf::Vector2u window_size = window.getSize();
+            float panel_width = 250.0f;
+            float panel_x = window_size.x - panel_width - 10.0f;
+            float panel_y = 10.0f;
+            // Header bounds
+            if (mouse_pos.x >= panel_x && mouse_pos.x <= panel_x + panel_width &&
+                mouse_pos.y >= panel_y && mouse_pos.y <= panel_y + 28.0f) {
+                items_panel_collapsed = !items_panel_collapsed;
+                ui_mouse_captured = true;
+                return;
+            }
+            if (items_panel_collapsed) return;
+            
             // Check each checkbox
             for (auto& cb : ui_checkboxes) {
                 if (mouse_pos.x >= cb.rect_px.left && 
@@ -1306,7 +1365,10 @@ void GraphRenderer::draw_ui_checkboxes() {
     // Position in top-right corner
     sf::Vector2u window_size = window.getSize();
     float panel_width = 250.0f;
-    float panel_height = ui_checkboxes.size() * 25.0f + 40.0f;
+    float header_height = 28.0f;
+    float max_panel_height = std::min(400.0f, static_cast<float>(window_size.y) - 40.0f);
+    float content_height = ui_checkboxes.size() * 25.0f + header_height + 12.0f;
+    float panel_height = std::min(max_panel_height, content_height);
     float panel_x = window_size.x - panel_width - 10.0f;
     float panel_y = 10.0f;
     
@@ -1318,13 +1380,33 @@ void GraphRenderer::draw_ui_checkboxes() {
     panel.setOutlineThickness(1.0f);
     window.draw(panel);
     
-    // Draw title
+    // Draw title with collapse toggle
     sf::Text title(ui_font);
-    title.setString("Track Items:");
+    title.setString("Track Items");
     title.setCharacterSize(14);
     title.setFillColor(sf::Color(200, 200, 220));
-    title.setPosition(sf::Vector2f(panel_x + 10.0f, panel_y + 5.0f));
+    title.setPosition(sf::Vector2f(panel_x + 30.0f, panel_y + 6.0f));
     window.draw(title);
+    // Triangle indicator
+    sf::ConvexShape tri;
+    tri.setPointCount(3);
+    if (items_panel_collapsed) {
+        tri.setPoint(0, sf::Vector2f(panel_x + 12.f, panel_y + 10.f));
+        tri.setPoint(1, sf::Vector2f(panel_x + 22.f, panel_y + 16.f));
+        tri.setPoint(2, sf::Vector2f(panel_x + 12.f, panel_y + 22.f));
+    } else {
+        tri.setPoint(0, sf::Vector2f(panel_x + 12.f, panel_y + 10.f));
+        tri.setPoint(1, sf::Vector2f(panel_x + 22.f, panel_y + 10.f));
+        tri.setPoint(2, sf::Vector2f(panel_x + 17.f, panel_y + 22.f));
+    }
+    tri.setFillColor(sf::Color(200,200,220));
+    window.draw(tri);
+    
+    if (items_panel_collapsed) {
+        // Restore original view and exit
+        window.setView(original_view);
+        return;
+    }
     
     // Draw each checkbox
     for (const auto& cb : ui_checkboxes) {
@@ -1366,6 +1448,8 @@ void GraphRenderer::draw_ui_checkboxes() {
         label.setPosition(sf::Vector2f(cb.rect_px.left + cb.rect_px.width + 10.0f, cb.rect_px.top + 2.0f));
         window.draw(label);
     }
+    
+    // No clipping; if content extends, it will be drawn outside for now
     
     // Restore original view
     window.setView(original_view);
