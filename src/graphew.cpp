@@ -136,6 +136,7 @@ int main(int argc, char* argv[]) {
             // Add visual option checkboxes
             renderer->add_checkbox("--- Visual Options ---", nullptr);  // Separator
             renderer->add_checkbox("Size by Frequency", &args.size_by_freq);
+            renderer->add_checkbox("Include Position", &args.include_position);
             renderer->add_checkbox("--- Color Modes ---", nullptr);  // Separator
             renderer->add_checkbox("Default Color", nullptr);  // Will handle this specially
             renderer->add_checkbox("Color by Total Items", &args.color_by_total);
@@ -167,6 +168,11 @@ int main(int argc, char* argv[]) {
                     InventoryState state;
                     state.timestep = timestep;
                     state.agent_id = agent.agent_id;
+                    
+                    // Get agent position at this timestep
+                    Vector3 pos = agent.get_location_at_time(timestep);
+                    state.position = pos;
+                    state.has_position = (pos.x != 0 || pos.y != 0 || pos.z != 0);  // Assuming (0,0,0) means no position
                     
                     // Fill in all tracked items at this timestep
                     for (const auto& [item, values] : agent.inventory_over_time) {
@@ -209,6 +215,7 @@ int main(int argc, char* argv[]) {
             InventoryFilterConfig config;
             config.tracked_items = tracked_items;
             config.size_by_frequency = args.size_by_freq;
+            config.include_position = args.include_position;
             config.min_timestep = args.min_timestep;
             config.max_timestep = args.max_timestep;
             config.separate_by_agent = false;  // Aggregate across all agents
@@ -263,6 +270,11 @@ int main(int argc, char* argv[]) {
                     ts.timestep = t;
                     ts.state.timestep = t;
                     ts.state.agent_id = agent.agent_id;
+                    
+                    // Get agent position at this timestep
+                    Vector3 pos = agent.get_location_at_time(t);
+                    ts.state.position = pos;
+                    ts.state.has_position = (pos.x != 0 || pos.y != 0 || pos.z != 0);
                     
                     // Get inventory at this time
                     for (const std::string& item : replay.inventory_items) {
@@ -504,6 +516,7 @@ int main(int argc, char* argv[]) {
     bool last_size_by_freq = args.size_by_freq;
     bool last_color_by_hearts = color_by_hearts;
     bool last_color_by_specific = color_by_specific;
+    bool last_include_position = args.include_position;
     
     while (!renderer->should_close()) {
         float delta_time = clock.restart().asSeconds();
@@ -544,12 +557,14 @@ int main(int argc, char* argv[]) {
             if (args.color_by_total != last_color_by_total || 
                 args.size_by_freq != last_size_by_freq ||
                 color_by_hearts != last_color_by_hearts ||
-                color_by_specific != last_color_by_specific) {
+                color_by_specific != last_color_by_specific ||
+                args.include_position != last_include_position) {
                 needs_rebuild = true;
                 last_color_by_total = args.color_by_total;
                 last_size_by_freq = args.size_by_freq;
                 last_color_by_hearts = color_by_hearts;
                 last_color_by_specific = color_by_specific;
+                last_include_position = args.include_position;
             }
         }
         
@@ -570,6 +585,7 @@ int main(int argc, char* argv[]) {
             InventoryFilterConfig config;
             config.tracked_items = tracked_items;
             config.size_by_frequency = args.size_by_freq;
+            config.include_position = args.include_position;
             config.min_timestep = args.min_timestep;
             config.max_timestep = args.max_timestep;
             config.separate_by_agent = false;

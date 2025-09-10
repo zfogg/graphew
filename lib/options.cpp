@@ -19,6 +19,7 @@ bool parse_command_line(int argc, char* argv[], CommandLineArgs* args) {
         {"items", required_argument, 0, 'I'},
         {"color-total", no_argument, 0, 'c'},
         {"size-freq", no_argument, 0, 's'},
+        {"position", no_argument, 0, 'p'},
         {"timestep", required_argument, 0, 't'},
         {0, 0, 0, 0}
     };
@@ -26,7 +27,7 @@ bool parse_command_line(int argc, char* argv[], CommandLineArgs* args) {
     int c;
     int option_index = 0;
     
-    while ((c = getopt_long(argc, argv, "f:hviI:cst:", long_options, &option_index)) != -1) {
+    while ((c = getopt_long(argc, argv, "f:hviI:cspt:", long_options, &option_index)) != -1) {
         switch (c) {
             case 'f': {
                 if (args->input_file) {
@@ -66,6 +67,10 @@ bool parse_command_line(int argc, char* argv[], CommandLineArgs* args) {
                 
             case 's':
                 args->size_by_freq = true;
+                break;
+                
+            case 'p':
+                args->include_position = true;
                 break;
                 
             case 't': {
@@ -116,6 +121,7 @@ void print_usage(const char* program_name) {
     printf("  -I, --items LIST    Track specific items (comma-separated, e.g. 'heart,red_ore')\n");
     printf("  -c, --color-total   Color nodes by total inventory value\n");
     printf("  -s, --size-freq     Size nodes by state frequency\n");
+    printf("  -p, --position      Include 2D position in state space\n");
     printf("  -t, --timestep N    Limit to timestep range (e.g. '100:500' or just '500')\n\n");
     printf("Examples:\n");
     printf("  # Show all inventory state transitions:\n");

@@ -13,6 +13,7 @@ typedef struct {
     bool inventory_mode;    // Enable inventory transition graph mode
     bool color_by_total;    // Color nodes by total inventory
     bool size_by_freq;      // Size nodes by frequency
+    bool include_position;  // Include 2D position in state space
     int min_timestep;
     int max_timestep;
 } CommandLineArgs;

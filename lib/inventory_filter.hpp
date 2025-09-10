@@ -12,9 +12,11 @@ struct InventoryState {
     std::map<std::string, int> items;  // item_name -> quantity
     int timestep;
     int agent_id;
+    Vector3 position;  // Agent's position in world space
+    bool has_position;  // Whether position data is available
     
     // Create a unique key for this state based on selected items (ignoring timestep)
-    std::string get_key(const std::set<std::string>& selected_items) const {
+    std::string get_key(const std::set<std::string>& selected_items, bool include_position = false) const {
         std::string key;
         
         // If no items selected, use all items in state
@@ -32,11 +34,21 @@ struct InventoryState {
                 key += item + ":" + std::to_string(quantity);
             }
         }
+        
+        // Append position if requested and available
+        if (include_position && has_position) {
+            if (!key.empty()) key += ",";
+            // Round positions to grid cells to avoid too many unique states
+            int grid_x = static_cast<int>(std::round(position.x));
+            int grid_y = static_cast<int>(std::round(position.y));
+            key += "pos:" + std::to_string(grid_x) + ":" + std::to_string(grid_y);
+        }
+        
         return key;
     }
     
     // Calculate similarity/distance to another state
-    float distance_to(const InventoryState& other, const std::set<std::string>& tracked) const {
+    float distance_to(const InventoryState& other, const std::set<std::string>& tracked, bool include_position = false) const {
         float dist = 0.0f;
         std::set<std::string> all_items;
         
@@ -61,6 +73,14 @@ struct InventoryState {
             dist += (q1 - q2) * (q1 - q2);
         }
         
+        // Add position distance if requested and both states have positions
+        if (include_position && has_position && other.has_position) {
+            float dx = position.x - other.position.x;
+            float dy = position.y - other.position.y;
+            // Weight position distance relative to inventory differences
+            dist += (dx * dx + dy * dy) * 0.1f;  // Adjust weight as needed
+        }
+        
         return std::sqrt(dist);
     }
 };
@@ -78,6 +98,9 @@ struct InventoryFilterConfig {
     
     // If true, preserve temporal structure (don't aggregate identical states)
     bool timeline_mode = false;
+    
+    // Whether to include agent position in state space
+    bool include_position = false;
     
     // Minimum quantity to consider (filter out zero quantities)
     int min_quantity = 0;
@@ -142,7 +165,7 @@ public:
         
         // First pass: identify unique states
         for (const auto& state : states) {
-            std::string key = state.get_key(config.tracked_items);
+            std::string key = state.get_key(config.tracked_items, config.include_position);
             state_frequency[key]++;
         }
         
@@ -178,7 +201,7 @@ public:
             
             // Find representative states
             for (const auto& state : states) {
-                std::string key = state.get_key(config.tracked_items);
+                std::string key = state.get_key(config.tracked_items, config.include_position);
                 if (key_to_state.find(key) == key_to_state.end()) {
                     key_to_state[key] = state;
                 }
@@ -187,7 +210,7 @@ public:
             // Calculate distances
             for (size_t i = 0; i < keys.size(); i++) {
                 for (size_t j = i + 1; j < keys.size(); j++) {
-                    float dist = key_to_state[keys[i]].distance_to(key_to_state[keys[j]], config.tracked_items);
+                    float dist = key_to_state[keys[i]].distance_to(key_to_state[keys[j]], config.tracked_items, config.include_position);
                     distances[i][j] = dist;
                     distances[j][i] = dist;
                 }
@@ -213,7 +236,7 @@ public:
         for (const auto& [key, freq] : state_frequency) {
             // Find a representative state for this key
             for (const auto& state : states) {
-                if (state.get_key(config.tracked_items) == key) {
+                if (state.get_key(config.tracked_items, config.include_position) == key) {
                     Vector3 pos = state_positions[key];
                     
                     // Color based on configuration
@@ -314,8 +337,8 @@ public:
                 continue;
             }
             
-            std::string prev_key = prev_state.get_key(config.tracked_items);
-            std::string curr_key = curr_state.get_key(config.tracked_items);
+            std::string prev_key = prev_state.get_key(config.tracked_items, config.include_position);
+            std::string curr_key = curr_state.get_key(config.tracked_items, config.include_position);
             
             // Skip if no change and we only want changes
             if (config.only_changes && prev_key == curr_key) {
@@ -343,10 +366,10 @@ public:
                 // Get a sample state for this transition to determine color
                 InventoryState sample_prev, sample_curr;
                 for (const auto& state : states) {
-                    if (state.get_key(config.tracked_items) == prev_key && sample_prev.items.empty()) {
+                    if (state.get_key(config.tracked_items, config.include_position) == prev_key && sample_prev.items.empty()) {
                         sample_prev = state;
                     }
-                    if (state.get_key(config.tracked_items) == curr_key && sample_curr.items.empty()) {
+                    if (state.get_key(config.tracked_items, config.include_position) == curr_key && sample_curr.items.empty()) {
                         sample_curr = state;
                     }
                     if (!sample_prev.items.empty() && !sample_curr.items.empty()) break;
