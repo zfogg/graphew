@@ -966,9 +966,7 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
     // Precompute camera forward direction for depth calculations
     Vector3 forward_dir = (scale_for_render(camera_target) - scale_for_render(camera_position)).normalize();
     
-    // Draw edges with 3D perspective and lighting
-    std::vector<sf::Vertex> edge_vertices;
-    
+    // Draw edges with thickness and directionality
     for (uint32_t i = 0; i < graph.edge_count; i++) {
         const GraphEdge& edge = graph.edges[i];
         if (!edge.visible) continue;
@@ -979,41 +977,114 @@ void GraphRenderer::render_frame(const Graph3D& graph, const Pixels& overlay) {
         sf::Vector2f from_pos = world_to_screen_3d(from_node.position);
         sf::Vector2f to_pos = world_to_screen_3d(to_node.position);
         
-        // Calculate depth for fog
-        Vector3 edge_center = (from_node.position + to_node.position) * 0.5f;
-        Vector3 relative_pos = scale_for_render(edge_center) - scale_for_render(camera_position);
-        float depth = relative_pos.x * forward_dir.x + relative_pos.y * forward_dir.y + relative_pos.z * forward_dir.z;
+        // Calculate depths for gradient
+        Vector3 from_relative = scale_for_render(from_node.position) - scale_for_render(camera_position);
+        Vector3 to_relative = scale_for_render(to_node.position) - scale_for_render(camera_position);
+        float from_depth = from_relative.x * forward_dir.x + from_relative.y * forward_dir.y + from_relative.z * forward_dir.z;
+        float to_depth = to_relative.x * forward_dir.x + to_relative.y * forward_dir.y + to_relative.z * forward_dir.z;
         
-        // Base edge color with transparency based on depth
-        sf::Color edge_color(130, 130, 180, 170);
+        // Use actual edge color from graph data
+        sf::Color base_color(edge.color.r, edge.color.g, edge.color.b, edge.color.a);
         
-        // Apply depth and subtle contour shading to edges based on midpoint height
-        float shade = calculate_depth_shade(depth);
-        edge_color.r *= shade;
-        edge_color.g *= shade;
-        edge_color.b *= shade;
-        float mid_height = edge_center.y - scene_center.y;
-        float band_e = 0.5f + 0.5f * std::sin(mid_height * lighting.contour_frequency + lighting.contour_offset);
-        float contour_mix_e = 1.0f - (lighting.contour_intensity * 0.5f) + (lighting.contour_intensity * 0.5f) * band_e;
-        edge_color.r = static_cast<unsigned char>(std::min(255.0f, edge_color.r * contour_mix_e));
-        edge_color.g = static_cast<unsigned char>(std::min(255.0f, edge_color.g * contour_mix_e));
-        edge_color.b = static_cast<unsigned char>(std::min(255.0f, edge_color.b * contour_mix_e));
+        // Create gradient for directionality
+        sf::Color from_color = base_color;
+        sf::Color to_color = base_color;
+        
+        // Fade from source (30% opacity) to destination (100% opacity)
+        from_color.a = static_cast<unsigned char>(base_color.a * 0.3f);
+        to_color.a = static_cast<unsigned char>(base_color.a * 1.0f);
+        
+        // Apply depth shading
+        float from_shade = calculate_depth_shade(from_depth);
+        float to_shade = calculate_depth_shade(to_depth);
+        
+        from_color.r *= from_shade;
+        from_color.g *= from_shade;
+        from_color.b *= from_shade;
+        
+        to_color.r *= to_shade;
+        to_color.g *= to_shade;
+        to_color.b *= to_shade;
+        
+        // Apply contour shading
+        float from_height = from_node.position.y - scene_center.y;
+        float to_height = to_node.position.y - scene_center.y;
+        
+        float from_band = 0.5f + 0.5f * std::sin(from_height * lighting.contour_frequency + lighting.contour_offset);
+        float to_band = 0.5f + 0.5f * std::sin(to_height * lighting.contour_frequency + lighting.contour_offset);
+        
+        float from_contour = 1.0f - (lighting.contour_intensity * 0.5f) + (lighting.contour_intensity * 0.5f) * from_band;
+        float to_contour = 1.0f - (lighting.contour_intensity * 0.5f) + (lighting.contour_intensity * 0.5f) * to_band;
+        
+        from_color.r = static_cast<unsigned char>(std::min(255.0f, from_color.r * from_contour));
+        from_color.g = static_cast<unsigned char>(std::min(255.0f, from_color.g * from_contour));
+        from_color.b = static_cast<unsigned char>(std::min(255.0f, from_color.b * from_contour));
+        
+        to_color.r = static_cast<unsigned char>(std::min(255.0f, to_color.r * to_contour));
+        to_color.g = static_cast<unsigned char>(std::min(255.0f, to_color.g * to_contour));
+        to_color.b = static_cast<unsigned char>(std::min(255.0f, to_color.b * to_contour));
         
         // Apply fog
-        edge_color = apply_fog(edge_color, depth);
+        from_color = apply_fog(from_color, from_depth);
+        to_color = apply_fog(to_color, to_depth);
         
-        // Create edge vertices
-        sf::Vertex v1, v2;
-        v1.position = from_pos;
-        v1.color = edge_color;
-        v2.position = to_pos;
-        v2.color = edge_color;
-        edge_vertices.push_back(v1);
-        edge_vertices.push_back(v2);
-    }
-    
-    if (!edge_vertices.empty()) {
-        window.draw(edge_vertices.data(), edge_vertices.size(), sf::PrimitiveType::Lines);
+        // Draw thick edges as tapered quads
+        if (edge.thickness > 1.5f) {
+            sf::Vector2f dir = to_pos - from_pos;
+            float len = std::sqrt(dir.x * dir.x + dir.y * dir.y);
+            
+            if (len > 0.001f) {
+                dir /= len; // normalize
+                sf::Vector2f perp(-dir.y, dir.x); // perpendicular
+                
+                // Taper: thin at source, thick at destination
+                float source_width = edge.thickness * 0.4f;
+                float dest_width = edge.thickness * 0.8f;
+                
+                sf::VertexArray quad(sf::PrimitiveType::TriangleStrip, 4);
+                
+                quad[0].position = from_pos - perp * source_width;
+                quad[0].color = from_color;
+                
+                quad[1].position = from_pos + perp * source_width;
+                quad[1].color = from_color;
+                
+                quad[2].position = to_pos - perp * dest_width;
+                quad[2].color = to_color;
+                
+                quad[3].position = to_pos + perp * dest_width;
+                quad[3].color = to_color;
+                
+                window.draw(quad);
+                
+                // Add arrowhead for very thick edges
+                if (edge.thickness > 3.0f) {
+                    float arrow_size = dest_width * 2.0f;
+                    sf::Vector2f arrow_base = to_pos - dir * arrow_size;
+                    
+                    sf::VertexArray arrow(sf::PrimitiveType::Triangles, 3);
+                    arrow[0].position = to_pos;
+                    arrow[0].color = to_color;
+                    
+                    arrow[1].position = arrow_base - perp * arrow_size;
+                    arrow[1].color = to_color;
+                    
+                    arrow[2].position = arrow_base + perp * arrow_size;
+                    arrow[2].color = to_color;
+                    
+                    window.draw(arrow);
+                }
+            }
+        } else {
+            // Thin edges - draw as gradient lines
+            sf::Vertex line[2];
+            line[0].position = from_pos;
+            line[0].color = from_color;
+            line[1].position = to_pos;
+            line[1].color = to_color;
+            
+            window.draw(line, 2, sf::PrimitiveType::Lines);
+        }
     }
     
     // Build draw order for nodes: sort by depth (far to near) to emulate z-buffer

@@ -300,15 +300,17 @@ public:
             }
         }
         
-        // Second pass: create edges for unique transitions
-        std::set<std::pair<std::string, std::string>> seen_transitions;
+        // Second pass: create edges with frequency tracking
+        std::map<std::pair<std::string, std::string>, int> transition_counts;
         
+        // Count all transitions
         for (size_t i = 1; i < states.size(); i++) {
             const auto& prev_state = states[i-1];
             const auto& curr_state = states[i];
             
             // Only connect consecutive states from same agent
-            if (config.separate_by_agent && prev_state.agent_id != curr_state.agent_id) {
+            // Always check agent boundaries to ensure causal transitions
+            if (prev_state.agent_id != curr_state.agent_id) {
                 continue;
             }
             
@@ -320,27 +322,46 @@ public:
                 continue;
             }
             
-            // Check if we've seen this transition before
             auto transition = std::make_pair(prev_key, curr_key);
-            if (seen_transitions.count(transition) > 0) {
-                continue;  // Skip duplicate transitions
-            }
-            seen_transitions.insert(transition);
+            transition_counts[transition]++;
+        }
+        
+        // Find max count for normalization
+        int max_count = 1;
+        for (const auto& [trans, count] : transition_counts) {
+            max_count = std::max(max_count, count);
+        }
+        
+        // Create edges with thickness based on frequency
+        for (const auto& [transition, count] : transition_counts) {
+            const auto& [prev_key, curr_key] = transition;
             
             auto prev_it = state_to_node.find(prev_key);
             auto curr_it = state_to_node.find(curr_key);
             
             if (prev_it != state_to_node.end() && curr_it != state_to_node.end()) {
+                // Get a sample state for this transition to determine color
+                InventoryState sample_prev, sample_curr;
+                for (const auto& state : states) {
+                    if (state.get_key(config.tracked_items) == prev_key && sample_prev.items.empty()) {
+                        sample_prev = state;
+                    }
+                    if (state.get_key(config.tracked_items) == curr_key && sample_curr.items.empty()) {
+                        sample_curr = state;
+                    }
+                    if (!sample_prev.items.empty() && !sample_curr.items.empty()) break;
+                }
+                
                 // Color edge based on what changed
                 Color edge_color = BLUE;
                 bool increased = false;
                 bool decreased = false;
                 
                 for (const auto& item : config.tracked_items) {
-                    auto p = prev_state.items.find(item);
-                    auto c = curr_state.items.find(item);
-                    int prev_qty = (p != prev_state.items.end()) ? p->second : 0;
-                    int curr_qty = (c != curr_state.items.end()) ? c->second : 0;
+                    auto p = sample_prev.items.find(item);
+                    auto c = sample_curr.items.find(item);
+                    int prev_qty = (p != sample_prev.items.end()) ? p->second : 0;
+                    int curr_qty = (c != sample_curr.items.end()) ? c->second : 0;
                     
                     if (curr_qty > prev_qty) increased = true;
                     if (curr_qty < prev_qty) decreased = true;
@@ -354,7 +375,10 @@ public:
                     edge_color = YELLOW;  // Mixed change
                 }
                 
-                graph.add_edge(prev_it->second, curr_it->second, edge_color, 1.0f);
+                // Calculate thickness based on frequency (0.5 to 4.0)
+                float thickness = 0.5f + 3.5f * (float(count) / float(max_count));
+                
+                graph.add_edge(prev_it->second, curr_it->second, edge_color, thickness);
             }
         }
     }

@@ -110,7 +110,7 @@ make debug         # Show build configuration
 ./bin/graphew -f replay.json.z -i
 
 # Track only heart pickups (1D projection)
-./bin/graphew -f replay.json.z -i -I heart
+a
 
 # Track hearts and red ore (2D relationships)
 ./bin/graphew -f replay.json.z -i -I heart,ore_red

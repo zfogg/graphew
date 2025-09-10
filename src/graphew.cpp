@@ -343,11 +343,14 @@ int main(int argc, char* argv[]) {
                 agent_time_to_node[{ts.agent_id, ts.timestep}] = node_id;
             }
             
-            // Create edges for each agent's trajectory
+            // Create edges for each agent's trajectory with frequency tracking
             std::map<int, std::vector<std::pair<int, int>>> agent_timeline;
             for (const auto& ts : all_states) {
                 agent_timeline[ts.agent_id].push_back({ts.timestep, ts.agent_id});
             }
+            
+            // Track edge frequencies
+            std::map<std::pair<uint32_t, uint32_t>, int> edge_counts;
             
             for (const auto& [agent_id, timeline] : agent_timeline) {
                 for (size_t i = 1; i < timeline.size(); i++) {
@@ -360,17 +363,28 @@ int main(int argc, char* argv[]) {
                     if (prev_it != agent_time_to_node.end() && curr_it != agent_time_to_node.end()) {
                         uint32_t from_node = prev_it->second;
                         uint32_t to_node = curr_it->second;
-                        
-                        // Color edges by agent
-                        Color edge_color = Color(
-                            150 + (agent_id * 37) % 105,
-                            150 + (agent_id * 73) % 105,
-                            150 + (agent_id * 113) % 105
-                        );
-                        
-                        graph3d->add_edge(from_node, to_node, edge_color, 1.0f);
+                        edge_counts[{from_node, to_node}]++;
                     }
                 }
+            }
+            
+            // Find max count for normalization
+            int max_edge_count = 1;
+            for (const auto& [edge, count] : edge_counts) {
+                max_edge_count = std::max(max_edge_count, count);
+            }
+            
+            // Add edges with thickness based on frequency
+            for (const auto& [edge_pair, count] : edge_counts) {
+                const auto& [from_node, to_node] = edge_pair;
+                
+                // Base color (could vary by direction or other factors)
+                Color edge_color = Color(100, 150, 200);
+                
+                // Calculate thickness based on frequency (0.5 to 4.0)
+                float thickness = 0.5f + 3.5f * (float(count) / float(max_edge_count));
+                
+                graph3d->add_edge(from_node, to_node, edge_color, thickness);
             }
             
             std::cout << "Created " << inventory_to_node.size() << " unique inventory state nodes\n";
